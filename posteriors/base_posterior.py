@@ -8,7 +8,10 @@ import tensorflow as tf
 from ..base import MeanAndVariance, Module, Parameter, RegressionData, TensorType
 from ..conditionals.utils_conditionals import *
 from ..config import default_float, default_jitter
-from ..covariances import Kuf, Kuu
+from ..covariances.kuu import Kuu
+from ..covariances.kuf import Kuf
+from ..covariances.multioutput.kuus import Kuus
+from ..covariances.multioutput.kufs import Kufs
 from ..inducing_variables import (
     InducingPoints,
     InducingVariables,
@@ -134,7 +137,6 @@ class IndependentPosterior(BasePosterior):
 
         return Kff
 
-
 class IndependentPosteriorSingleOutput(IndependentPosterior):
     
     # could almost be the same as IndependentPosteriorMultiOutput ...
@@ -153,49 +155,25 @@ class IndependentPosteriorSingleOutput(IndependentPosterior):
         )  # [N, P],  [P, N, N] or [N, P]
         return self._post_process_mean_and_cov(fmean, fvar, full_cov, full_output_cov)
 
-"""
 class IndependentPosteriorMultiOutput(IndependentPosterior):
     def _conditional_fused(
         self, Xnew: TensorType, full_cov: bool = False, full_output_cov: bool = False
     ) -> MeanAndVariance:
         if isinstance(self.X_data, SharedIndependentInducingVariables) and isinstance(
-            self.kernel, kernels.SharedIndependent
-        ):
+            self.kernel, SharedIndependent):
             # same as IndependentPosteriorSingleOutput except for following line
             Knn = self.kernel.kernel(Xnew, full_cov=full_cov)
             # we don't call self.kernel() directly as that would do unnecessary tiling
 
-            Kmm = covariances.Kuu(self.X_data, self.kernel, jitter=default_jitter())  # [M, M]
-            Kmn = covariances.Kuf(self.X_data, self.kernel, Xnew)  # [M, N]
+            Kmm = Kuus(self.X_data, self.kernel, jitter=default_jitter())  # [M, M]
+            Kmn = Kufs(self.X_data, self.kernel, Xnew)  # [M, N]
 
             fmean, fvar = base_conditional(
                 Kmn, Kmm, Knn, self.q_mu, full_cov=full_cov, q_sqrt=self.q_sqrt, white=self.whiten
             )  # [N, P],  [P, N, N] or [N, P]
         else:
-            # this is the messy thing with tf.map_fn, cleaned up by the
-            # st/clean_up_broadcasting_conditionals branch
-
-            # Following are: [P, M, M]  -  [P, M, N]  -  [P, N](x N)
-            Kmms = covariances.Kuu(self.X_data, self.kernel, jitter=default_jitter())  # [P, M, M]
-            Kmns = covariances.Kuf(self.X_data, self.kernel, Xnew)  # [P, M, N]
-            if isinstance(self.kernel, kernels.Combination):
-                kernel_list = self.kernel.kernels
-            else:
-                kernel_list = [self.kernel.kernel] * len(self.X_data.inducing_variable_list)
-            Knns = tf.stack(
-                [k.K(Xnew) if full_cov else k.K_diag(Xnew) for k in kernel_list], axis=0
-            )
-
-            fmean, fvar = separate_independent_conditional_implementation(
-                Kmns,
-                Kmms,
-                Knns,
-                self.q_mu,
-                q_sqrt=self.q_sqrt,
-                full_cov=full_cov,
-                white=self.whiten,
-            )
+            raise NotImplementedError
 
         return self._post_process_mean_and_cov(fmean, fvar, full_cov, full_output_cov)
-"""
+
 

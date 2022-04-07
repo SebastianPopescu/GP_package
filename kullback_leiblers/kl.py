@@ -19,7 +19,7 @@ from packaging.version import Version
 
 from ..base import TensorType
 from ..config import default_float, default_jitter
-from ..covariances import Kuu
+from ..covariances.kuu import Kuu
 from ..inducing_variables import InducingVariables
 from ..kernels import Kernel
 from ..utils import to_default_float
