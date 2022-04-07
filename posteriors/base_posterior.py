@@ -8,10 +8,7 @@ import tensorflow as tf
 from ..base import MeanAndVariance, Module, Parameter, RegressionData, TensorType
 from ..conditionals.utils_conditionals import *
 from ..config import default_float, default_jitter
-from ..covariances.kuu import Kuu
-from ..covariances.kuf import Kuf
-from ..covariances.multioutput.kuus import Kuus
-from ..covariances.multioutput.kufs import Kufs
+from ..covariances import Kuf, Kuu, Kuus, Kufs
 from ..inducing_variables import (
     InducingPoints,
     InducingVariables,
