@@ -6,11 +6,11 @@ import tensorflow_probability as tfp
 from sklearn.neighbors import KernelDensity
 tf.keras.backend.set_floatx("float64")
 
-from ..models import *
-from ..layers import *
-from ..kernels import *
-from ..inducing_variables import *
-from ..architectures import Config, build_constant_input_dim_deep_gp
+from src.models import *
+from src.layers import *
+from src.kernels import *
+from src.inducing_variables import *
+from src.architectures import Config, build_constant_input_dim_deep_gp
 
 
 def motorcycle_data():
