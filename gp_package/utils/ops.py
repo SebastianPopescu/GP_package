@@ -119,6 +119,28 @@ def square_distance(X: tf.Tensor, X2: Optional[tf.Tensor]) -> tf.Tensor:
     return dist
 
 
+def wasserstein_2_distance(mu1 : tfp.distributions.MultivariateNormalDiag, mu2 : Optional[tfp.distributions.MultivariateNormalDiag]) -> tf.Tensor:
+
+    """
+    Wasserstein-2 distance between multivariate normal distributions with diagonal covariance
+    Implementation based on simpliefied formula given in https://djalil.chafai.net/blog/2010/04/30/wasserstein-distance-between-two-gaussians/
+    """
+
+    # Warning -- only works with diagonal covariance matrices as the Wasserstein-2 based kernel is valid only for univariate Gaussians
+    # Otherwise -- need to have a look at Sliced Wasserstein-2 distances and build kernels on that
+    assert isinstance(mu1, tfp.distributions.MultivariateNormalDiag)
+    mu1_mean = mu1.loc # shape - (N,D)
+    mu1_std = mu1.scale.diag # shape - (N,D))
+    if mu2 is None:
+        return tf.square(difference_matrix(mu1_mean, mu1_mean)) + tf.square(difference_matrix(mu1_std, mu1_std)) # shape - (N,M,D)
+
+    assert isinstance(mu2, tfp.distributions.MultivariateNormalDiag)
+    
+    mu2_mean = mu2.loc # shape - (M,D)
+    mu2_std = mu2.scale.diag # shape - (M,D)
+
+    return tf.square(difference_matrix(mu1_mean, mu2_mean)) + tf.square(difference_matrix(mu1_std, mu2_std)) # shape - (N,M,D)
+
 def difference_matrix(X: tf.Tensor, X2: Optional[tf.Tensor]) -> tf.Tensor:
     """
     Returns (X - X2ᵀ)

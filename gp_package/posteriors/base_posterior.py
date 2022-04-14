@@ -4,6 +4,10 @@ from dataclasses import dataclass
 from typing import Optional, Tuple, Type, Union
 
 import tensorflow as tf
+import tensorflow_probability as tfp
+
+from gp_package.inducing_variables.distributional_inducing_variables import DistributionalInducingVariables
+from gp_package.inducing_variables.multioutput.distributional_inducing_variables import SharedIndependentDistributionalInducingVariables
 
 from ..base import MeanAndVariance, Module, Parameter, RegressionData, TensorType
 from ..conditionals.utils_conditionals import *
@@ -21,7 +25,7 @@ class AbstractPosterior(Module, ABC):
     def __init__(
         self,
         kernel: Kernel,
-        X_data: Union[tf.Tensor, InducingVariables],
+        X_data: Union[tf.Tensor, InducingVariables, DistributionalInducingVariables],
         cache: Optional[Tuple[tf.Tensor, ...]] = None,
         mean_function: Optional[MeanFunction] = None,
     ) -> None:
@@ -46,7 +50,7 @@ class AbstractPosterior(Module, ABC):
             return mean + self.mean_function(Xnew)
 
     def fused_predict_f(
-        self, Xnew: TensorType, full_cov: bool = False, full_output_cov: bool = False
+        self, Xnew: Union[TensorType,tfp.distributions.MultivariateNormalDiag], full_cov: bool = False, full_output_cov: bool = False
     ) -> MeanAndVariance:
         """
         Computes predictive mean and (co)variance at Xnew, including mean_function
@@ -59,7 +63,7 @@ class AbstractPosterior(Module, ABC):
 
     @abstractmethod
     def _conditional_fused(
-        self, Xnew: TensorType, full_cov: bool = False, full_output_cov: bool = False
+        self, Xnew: Union[TensorType,tfp.distributions.MultivariateNormalDiag], full_cov: bool = False, full_output_cov: bool = False
     ) -> MeanAndVariance:
         """
         Computes predictive mean and (co)variance at Xnew, *excluding* mean_function
@@ -71,7 +75,7 @@ class BasePosterior(AbstractPosterior):
     def __init__(
         self,
         kernel: Kernel,
-        inducing_variable: InducingVariables,
+        inducing_variable: Union[InducingVariables,DistributionalInducingVariables],
         q_mu: tf.Tensor,
         q_sqrt: tf.Tensor,
         whiten: bool = True,
@@ -111,7 +115,7 @@ class IndependentPosterior(BasePosterior):
     ) -> MeanAndVariance:
         return mean, expand_independent_outputs(cov, full_cov, full_output_cov)
 
-    def _get_Kff(self, Xnew: TensorType, full_cov: bool) -> tf.Tensor:
+    def _get_Kff(self, Xnew: Union[TensorType,tfp.distributions.MultivariateNormalDiag], full_cov: bool) -> tf.Tensor:
 
         # TODO: this assumes that Xnew has shape [N, D] and no leading dims
 
@@ -138,7 +142,7 @@ class IndependentPosteriorSingleOutput(IndependentPosterior):
     
     # could almost be the same as IndependentPosteriorMultiOutput ...
     def _conditional_fused(
-        self, Xnew: TensorType, full_cov: bool = False, full_output_cov: bool = False
+        self, Xnew: Union[TensorType,tfp.distributions.MultivariateNormalDiag], full_cov: bool = False, full_output_cov: bool = False
     ) -> MeanAndVariance:
         # same as IndependentPosteriorMultiOutput, Shared~/Shared~ branch, except for following
         # line:
@@ -154,7 +158,7 @@ class IndependentPosteriorSingleOutput(IndependentPosterior):
 
 class IndependentPosteriorMultiOutput(IndependentPosterior):
     def _conditional_fused(
-        self, Xnew: TensorType, full_cov: bool = False, full_output_cov: bool = False
+        self, Xnew: Union[TensorType,tfp.distributions.MultivariateNormalDiag], full_cov: bool = False, full_output_cov: bool = False
     ) -> MeanAndVariance:
         if isinstance(self.X_data, SharedIndependentInducingVariables) and isinstance(
             self.kernel, SharedIndependent):
@@ -168,6 +172,20 @@ class IndependentPosteriorMultiOutput(IndependentPosterior):
             fmean, fvar = base_conditional(
                 Kmn, Kmm, Knn, self.q_mu, full_cov=full_cov, q_sqrt=self.q_sqrt, white=self.whiten
             )  # [N, P],  [P, N, N] or [N, P]
+        elif isinstance(self.X_data, SharedIndependentDistributionalInducingVariables) and isinstance(
+            self.kernel, SharedIndependent):
+            # same as IndependentPosteriorSingleOutput except for following line
+            Knn = self.kernel.kernel(Xnew, full_cov=full_cov)
+            # we don't call self.kernel() directly as that would do unnecessary tiling
+
+            Kmm = Kuus(self.X_data, self.kernel, jitter=default_jitter())  # [M, M]
+            Kmn = Kufs(self.X_data, self.kernel, Xnew)  # [M, N]
+
+            fmean, fvar = base_conditional(
+                Kmn, Kmm, Knn, self.q_mu, full_cov=full_cov, q_sqrt=self.q_sqrt, white=self.whiten
+            )  # [N, P],  [P, N, N] or [N, P]
+        
+        
         else:
             raise NotImplementedError
 

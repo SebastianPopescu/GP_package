@@ -33,6 +33,7 @@ from typing import Callable, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
+import tensorflow_probability as tfp
 
 from ..base import AnyNDArray, Module, TensorType
 
@@ -88,6 +89,7 @@ class Kernel(Module, metaclass=abc.ABCMeta):
         other_dims = other.active_dims.reshape(1, -1)
         return not np.any(this_dims == other_dims)
 
+    # Warning -- only works for Euclidean kernels
     def slice(self, X: TensorType, X2: Optional[TensorType] = None) -> Tuple[tf.Tensor, tf.Tensor]:
         """
         Slice the correct dimensions for use in the kernel, as indicated by `self.active_dims`.
@@ -107,6 +109,7 @@ class Kernel(Module, metaclass=abc.ABCMeta):
                 X2 = tf.gather(X2, dims, axis=-1)
         return X, X2
 
+    # Warning -- only works for Euclidean kernels
     def slice_cov(self, cov: TensorType) -> tf.Tensor:
         """
         Slice the correct dimensions for use in the kernel, as indicated by
@@ -141,6 +144,7 @@ class Kernel(Module, metaclass=abc.ABCMeta):
 
         return cov
 
+    # Warning -- only works for Euclidean kernels
     def _validate_ard_active_dims(self, ard_parameter: TensorType) -> None:
         """
         Validate that ARD parameter matches the number of active_dims (provided active_dims
@@ -160,17 +164,18 @@ class Kernel(Module, metaclass=abc.ABCMeta):
             )
 
     @abc.abstractmethod
-    def K(self, X: TensorType, X2: Optional[TensorType] = None) -> tf.Tensor:
+    def K(self, X: Union[TensorType,tfp.distributions.MultivariateNormalDiag], 
+        X2: Optional[Union[TensorType,tfp.distributions.MultivariateNormalDiag]] = None) -> tf.Tensor:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def K_diag(self, X: TensorType) -> tf.Tensor:
+    def K_diag(self, X: Union[TensorType,tfp.distributions.MultivariateNormalDiag]) -> tf.Tensor:
         raise NotImplementedError
 
     def __call__(
         self,
-        X: TensorType,
-        X2: Optional[TensorType] = None,
+        X: Union[TensorType,tfp.distributions.MultivariateNormalDiag],
+        X2: Optional[Union[TensorType,tfp.distributions.MultivariateNormalDiag]] = None,
         *,
         full_cov: bool = True,
         presliced: bool = False,

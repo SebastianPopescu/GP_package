@@ -13,7 +13,7 @@ from ..kullback_leiblers import standard_kl
 from ..mean_functions import Identity, MeanFunction
 
 from ..conditionals import conditional_GP
-from ..inducing_variables import MultioutputInducingVariables
+from ..inducing_variables import MultioutputDistributionalInducingVariables
 from ..kernels import MultioutputKernel
 from ..utils.bijectors import triangular
 
@@ -22,9 +22,9 @@ from ..math import _cholesky_with_jitter
 #from gpflux.runtime_checks import verify_compatibility
 #from gpflux.sampling.sample import Sample, efficient_sample
 
-class GPLayer(tfp.layers.DistributionLambda):
+class DistGPLayer(tfp.layers.DistributionLambda):
     """
-    A sparse variational multioutput GP layer. This layer holds the kernel,
+    A sparse variational multioutput DistGP layer. This layer holds the kernel,
     inducing variables and variational distribution, and mean function.
     """
 
@@ -39,7 +39,7 @@ class GPLayer(tfp.layers.DistributionLambda):
     def __init__(
         self,
         kernel: MultioutputKernel,
-        inducing_variable: MultioutputInducingVariables,
+        inducing_variable: MultioutputDistributionalInducingVariables,
         num_data: int,
         num_latent_gps: int,
         mean_function: Optional[MeanFunction] = None,
@@ -141,7 +141,7 @@ class GPLayer(tfp.layers.DistributionLambda):
 
     def predict(
         self,
-        inputs: TensorType,
+        inputs: tfp.distributions.MultivariateNormalDiag,
         *,
         full_cov: bool = False,
         full_output_cov: bool = False,
@@ -180,9 +180,10 @@ class GPLayer(tfp.layers.DistributionLambda):
             full_output_cov=full_output_cov,
             white=self.whiten,
         )
+
         return mean_cond + mean_function, cov
 
-    def call(self, inputs: TensorType, *args: List[Any], **kwargs: Dict[str, Any]) -> tf.Tensor:
+    def call(self, inputs: tfp.distributions.MultivariateNormalDiag, *args: List[Any], **kwargs: Dict[str, Any]):
         """
         The default behaviour upon calling this layer.
 
@@ -196,10 +197,9 @@ class GPLayer(tfp.layers.DistributionLambda):
         This method also adds a layer-specific loss function, given by the KL divergence between
         this layer and the GP prior (scaled to per-datapoint).
         """
-
         # I think this is getting just the samples from the distribution 
         outputs = super().call(inputs, *args, **kwargs)
-        
+
         if kwargs.get("training"):
             #log_prior = tf.add_n([p.log_prior_density() for p in self.kernel.trainable_parameters])
             loss = self.standard_kl() #- log_prior
@@ -228,7 +228,7 @@ class GPLayer(tfp.layers.DistributionLambda):
         )
 
     def _make_distribution_fn(
-        self, previous_layer_outputs: TensorType
+        self, previous_layer_outputs: tfp.distributions.MultivariateNormalDiag
     ) -> tfp.distributions.Distribution:
         """
         Construct the posterior distributions at the output points of the previous layer,
@@ -261,7 +261,7 @@ class GPLayer(tfp.layers.DistributionLambda):
                 "The combination of both `full_cov` and `full_output_cov` is not permitted."
             )
 
-    def _convert_to_tensor_fn(self, distribution: tfp.distributions.Distribution) -> tf.Tensor:
+    def _convert_to_tensor_fn(self, distribution: tfp.distributions.Distribution):
         """
         Convert the predictive distributions at the input points (see
         :meth:`_make_distribution_fn`) to a tensor of :attr:`num_samples`

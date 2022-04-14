@@ -17,15 +17,17 @@
 import tensorflow as tf
 from packaging.version import Version
 
+from typing import Union
+
 from ..base import TensorType
 from ..config import default_float, default_jitter
 from ..covariances import Kuu
-from ..inducing_variables import InducingVariables
+from ..inducing_variables import InducingVariables, DistributionalInducingVariables
 from ..kernels import Kernel
 from ..utils import to_default_float
 
 def standard_kl(
-    inducing_variable: InducingVariables,
+    inducing_variable: Union[InducingVariables,DistributionalInducingVariables],
     kernel: Kernel,
     q_mu: TensorType,
     q_sqrt: TensorType,

@@ -6,17 +6,17 @@ import tensorflow_probability as tfp
 from sklearn.neighbors import KernelDensity
 tf.keras.backend.set_floatx("float64")
 
-from src.models import *
-from src.layers import *
-from src.kernels import *
-from src.inducing_variables import *
-from src.architectures import Config, build_constant_input_dim_deep_gp
+from gp_package.models import *
+from gp_package.layers import *
+from gp_package.kernels import *
+from gp_package.inducing_variables import *
+from gp_package.architectures import Config, build_constant_input_dim_dist_deep_gp
 
 
 def motorcycle_data():
     """ Return inputs and outputs for the motorcycle dataset. We normalise the outputs. """
     import pandas as pd
-    df = pd.read_csv("/home/sebastian.popescu/Desktop/my_code/Dist_DGPs_v2/code/notebooks/data/motor.csv", index_col=0)
+    df = pd.read_csv("/home/sebastian.popescu/Desktop/my_code/GP_package/docs/notebooks/data/motor.csv", index_col=0)
     X, Y = df["times"].values.reshape(-1, 1), df["accel"].values.reshape(-1, 1)
     Y = (Y - Y.mean()) / Y.std()
     X /= X.max()
@@ -58,10 +58,10 @@ single_layer_dgp = DeepGP(gp_layers, likelihood_layer, num_data=X.shape[0])
 config = Config(
     num_inducing=25, inner_layer_qsqrt_factor=1e-5, likelihood_noise_variance=1e-2, whiten=True, hidden_layer_size=X.shape[1]
 )
-deep_gp: DeepGP = build_constant_input_dim_deep_gp(X, num_layers=2, config=config)
+dist_deep_gp: DistDeepGP = build_constant_input_dim_dist_deep_gp(X, num_layers=2, config=config)
 
 
-model = deep_gp.as_training_model()
+model = dist_deep_gp.as_training_model()
 model.compile(tf.optimizers.Adam(1e-2))
 
 history = model.fit({"inputs": X, "targets": Y}, epochs=int(1e3), verbose=1)
@@ -75,7 +75,7 @@ plt.close()
 fig, ax = plt.subplots()
 num_data_test = 200
 X_test = np.linspace(X.min() - X_MARGIN, X.max() + X_MARGIN, num_data_test).reshape(-1, 1)
-model = deep_gp.as_prediction_model()
+model = dist_deep_gp.as_prediction_model()
 out = model(X_test)
 
 mu = out.y_mean.numpy().squeeze()

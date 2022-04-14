@@ -14,9 +14,9 @@
 from typing import Sequence, Tuple
 
 import tensorflow as tf
-from ..inducing_variables import InducingVariables
+from ..distributional_inducing_variables import DistributionalInducingVariables
 
-class MultioutputInducingVariables(InducingVariables):
+class MultioutputDistributionalInducingVariables(DistributionalInducingVariables):
     """
     Multioutput Inducing Variables
     Base class for methods which define a collection of inducing variables which
@@ -28,11 +28,11 @@ class MultioutputInducingVariables(InducingVariables):
     """
 
     @property
-    def inducing_variables(self) -> Tuple[InducingVariables, ...]:
+    def inducing_variables(self) -> Tuple[DistributionalInducingVariables, ...]:
         raise NotImplementedError
 
 
-class FallbackSharedIndependentInducingVariables(MultioutputInducingVariables):
+class FallbackSharedIndependentDistributionalInducingVariables(MultioutputDistributionalInducingVariables):
     """
     Shared definition of inducing variables for each independent latent process.
 
@@ -61,7 +61,7 @@ class FallbackSharedIndependentInducingVariables(MultioutputInducingVariables):
     processes.
     """
 
-    def __init__(self, inducing_variable: InducingVariables):
+    def __init__(self, inducing_variable: DistributionalInducingVariables):
         super().__init__()
         self.inducing_variable = inducing_variable
 
@@ -70,11 +70,11 @@ class FallbackSharedIndependentInducingVariables(MultioutputInducingVariables):
         return self.inducing_variable.num_inducing
 
     @property
-    def inducing_variables(self) -> Tuple[InducingVariables]:
+    def inducing_variables(self) -> Tuple[DistributionalInducingVariables]:
         return (self.inducing_variable,)
 
 
-class FallbackSeparateIndependentInducingVariables(MultioutputInducingVariables):
+class FallbackSeparateIndependentDistributionalInducingVariables(MultioutputDistributionalInducingVariables):
     """
     Separate set of inducing variables for each independent latent process.
 
@@ -103,7 +103,7 @@ class FallbackSeparateIndependentInducingVariables(MultioutputInducingVariables)
     Note: each object should have the same number of inducing variables, M.
     """
 
-    def __init__(self, inducing_variable_list: Sequence[InducingVariables]):
+    def __init__(self, inducing_variable_list: Sequence[DistributionalInducingVariables]):
         super().__init__()
         self.inducing_variable_list = inducing_variable_list
 
@@ -113,11 +113,11 @@ class FallbackSeparateIndependentInducingVariables(MultioutputInducingVariables)
         return self.inducing_variable_list[0].num_inducing
 
     @property
-    def inducing_variables(self) -> Tuple[InducingVariables, ...]:
+    def inducing_variables(self) -> Tuple[DistributionalInducingVariables, ...]:
         return tuple(self.inducing_variable_list)
 
 
-class SharedIndependentInducingVariables(FallbackSharedIndependentInducingVariables):
+class SharedIndependentDistributionalInducingVariables(FallbackSharedIndependentDistributionalInducingVariables):
     """
     Here, we define the same inducing variables as in the base class. However,
     this class is intended to be used without the constraints on the shapes that
@@ -128,7 +128,7 @@ class SharedIndependentInducingVariables(FallbackSharedIndependentInducingVariab
     pass
 
 
-class SeparateIndependentInducingVariables(FallbackSeparateIndependentInducingVariables):
+class SeparateIndependentDistributionalInducingVariables(FallbackSeparateIndependentDistributionalInducingVariables):
     """
     Here, we define the same inducing variables as in the base class. However,
     this class is intended to be used without the constraints on the shapes that

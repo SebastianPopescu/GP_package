@@ -13,9 +13,10 @@
 # limitations under the License.
 
 import abc
-from typing import Optional, Sequence, Tuple
+from typing import Optional, Sequence, Tuple, Union
 
 import tensorflow as tf
+import tensorflow_probability as tfp
 
 from ...base import Parameter, TensorType
 from ..base_kernel import Combination, Kernel
@@ -50,7 +51,8 @@ class MultioutputKernel(Kernel):
 
     @abc.abstractmethod
     def K(
-        self, X: TensorType, X2: Optional[TensorType] = None, full_output_cov: bool = True
+        self, X: Union[TensorType,tfp.distributions.MultivariateNormalDiag], 
+        X2: Optional[Union[TensorType,tfp.distributions.MultivariateNormalDiag]] = None, full_output_cov: bool = True
     ) -> tf.Tensor:
         """
         Returns the correlation of f(X) and f(X2), where f(.) can be multi-dimensional.
@@ -77,14 +79,15 @@ class MultioutputKernel(Kernel):
 
     def __call__(
         self,
-        X: TensorType,
-        X2: Optional[TensorType] = None,
+        X: Union[TensorType,tfp.distributions.MultivariateNormalDiag],
+        X2: Optional[Union[TensorType,tfp.distributions.MultivariateNormalDiag]] = None,
         *,
         full_cov: bool = False,
         full_output_cov: bool = True,
         presliced: bool = False,
     ) -> tf.Tensor:
         if not presliced:
+            # Warning - only works for SquaredExponential kernel
             X, X2 = self.slice(X, X2)
         if not full_cov and X2 is not None:
             raise ValueError(
@@ -118,7 +121,8 @@ class SharedIndependent(MultioutputKernel):
         return (self.kernel,)
 
     def K(
-        self, X: TensorType, X2: Optional[TensorType] = None, full_output_cov: bool = True
+        self, X: Union[TensorType,tfp.distributions.MultivariateNormalDiag], 
+        X2: Optional[Union[TensorType,tfp.distributions.MultivariateNormalDiag]] = None, full_output_cov: bool = True
     ) -> tf.Tensor:
         K = self.kernel.K(X, X2)  # [N, N2]
         if full_output_cov:
@@ -151,7 +155,8 @@ class SeparateIndependent(MultioutputKernel, Combination):
         return tuple(self.kernels)
 
     def K(
-        self, X: TensorType, X2: Optional[TensorType] = None, full_output_cov: bool = True
+        self, X: Union[TensorType,tfp.distributions.MultivariateNormalDiag], 
+        X2: Optional[Union[TensorType,tfp.distributions.MultivariateNormalDiag]] = None, full_output_cov: bool = True
     ) -> tf.Tensor:
         if full_output_cov:
             Kxxs = tf.stack([k.K(X, X2) for k in self.kernels], axis=2)  # [N, N2, P]

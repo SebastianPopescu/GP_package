@@ -1,15 +1,16 @@
-from typing import Optional
+from typing import Optional, Union
 
 import tensorflow as tf
+import tensorflow_probability as tfp
 
-from ..inducing_variables import InducingVariables
+from ..inducing_variables import InducingVariables, DistributionalInducingVariables
 from ..kernels import Kernel
 from ..base import MeanAndVariance
 from ..posteriors import IndependentPosteriorSingleOutput, IndependentPosteriorMultiOutput
 
 def conditional_GP(
-    Xnew: tf.Tensor,
-    inducing_variable: InducingVariables,
+    Xnew: Union[tf.Tensor, tfp.distributions.MultivariateNormalDiag],
+    inducing_variable: Union[InducingVariables,DistributionalInducingVariables],
     kernel: Kernel,
     f: tf.Tensor,
     *,

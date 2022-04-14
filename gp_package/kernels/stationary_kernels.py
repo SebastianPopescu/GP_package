@@ -16,10 +16,11 @@ from typing import Any, Optional
 
 import numpy as np
 import tensorflow as tf
+import tensorflow_probability as tfp
 
 from ..base import Parameter, TensorType
 from ..utils import positive
-from ..utils.ops import difference_matrix, square_distance
+from ..utils.ops import difference_matrix, square_distance, wasserstein_2_distance
 from .base_kernel import ActiveDims, Kernel
 
 
@@ -89,6 +90,7 @@ class IsotropicStationary(Stationary):
         Euclidean distance. Should operate element-wise on r.
     """
 
+    # Only used for SquaredExponential
     def K(self, X: TensorType, X2: Optional[TensorType] = None) -> tf.Tensor:
         r2 = self.scaled_squared_euclid_dist(X, X2)
         return self.K_r2(r2)
@@ -123,3 +125,50 @@ class SquaredExponential(IsotropicStationary):
 
     def K_r2(self, r2: TensorType) -> tf.Tensor:
         return self.variance * tf.exp(-0.5 * r2)
+
+
+class Hybrid(IsotropicStationary):
+
+    """
+    The radial basis function (RBF) or squared exponential kernel multiplied by the Wasserstein-2 distance based kernel. The kernel equation is
+
+        k(r) = σ² exp{-½ r²} W_{2}^{2}\left(\mu_{1}, \mu_{2} \right)
+
+    where:
+    r   is the Euclidean distance between the input points, scaled by the lengthscales parameter ℓ.
+    σ²  is the variance parameter
+
+    Functions drawn from a GP with this kernel are infinitely differentiable! 
+    TODO -- this remains to be seen as this also implies a discussion around
+    Wasserstein Gradient Flows 
+    """
+
+    # Overides default K from IsotropicStationary base class
+    def K(self, X: tfp.distributions.MultivariateNormalDiag, X2: Optional[tfp.distributions.MultivariateNormalDiag] = None) -> tf.Tensor:
+        
+        X_sampled = X.sample()
+        if X2 is not None:
+            assert isinstance(X2, tfp.distributions.MultivariateNormalDiag)
+            X2_sampled = X2.sample()
+        else:
+            X2_sampled = None
+        r2 = self.scaled_squared_euclid_dist(X_sampled, X2_sampled)
+        w2 = self.scaled_squared_Wasserstein_2_dist(X, X2)
+
+        return self.K_r2(r2, w2)
+
+    def K_r2(self, r2: TensorType, w2: TensorType) -> tf.Tensor:
+        
+        # r2 -- is the squared euclidean distance
+        # w2 - is the squared Wasserstein-2 distance
+        
+        return self.variance * tf.exp(-0.5 * r2) * tf.exp(-0.5 * w2)
+
+    def scaled_squared_Wasserstein_2_dist(self, mu1 : tfp.distributions.MultivariateNormalDiag, 
+        mu2 : Optional[tfp.distributions.MultivariateNormalDiag] = None) -> tf.Tensor:
+        """
+        Scales the raw Wasserstein-2 distance which is computed per input dimension
+        """
+        w2 = wasserstein_2_distance(mu1, mu2)
+
+        return tf.reduce_sum(self.scale(w2), axis=-1, keepdims=False)

@@ -17,6 +17,7 @@
 
 import itertools
 from typing import List, Optional, Tuple, Type, Union
+from sklearn.pipeline import FeatureUnion
 
 import tensorflow as tf
 
@@ -24,7 +25,7 @@ from ..base import Module, TensorType
 from ..layers import GPLayer, LikelihoodLayer, Likelihood
 #from gpflux.sampling.sample import Sample
 
-class DeepGP(Module):
+class DistDeepGP(Module):
     
     """
     This class combines a sequential function model ``f(x) = fₙ(⋯ (f₂(f₁(x))))``
@@ -73,7 +74,7 @@ class DeepGP(Module):
         self.default_model_class = default_model_class
         self.num_data = num_data
 
-    def _evaluate_deep_gp(
+    def _evaluate_dist_deep_gp(
         self,
         inputs: TensorType,
         targets: Optional[TensorType],
@@ -84,8 +85,10 @@ class DeepGP(Module):
         """
         features = inputs
 
-        for layer in self.f_layers:
-            features = layer(features, training=training)
+        for count, layer in enumerate(self.f_layers):
+            print("--------- we are at layer", count)
+            features = layer(features, training=training)            
+            
         return features
 
     def _evaluate_likelihood(
@@ -106,7 +109,7 @@ class DeepGP(Module):
         targets: Optional[TensorType] = None,
         training: Optional[bool] = None,
     ) -> tf.Tensor:
-        f_outputs = self._evaluate_deep_gp(inputs, targets=targets, training=training)
+        f_outputs = self._evaluate_dist_deep_gp(inputs, targets=targets, training=training)
         y_outputs = self._evaluate_likelihood(f_outputs, targets=targets, training=training)
         return y_outputs
 
