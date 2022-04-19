@@ -16,7 +16,7 @@ from gp_package.architectures import Config, build_constant_input_dim_deep_gp
 def motorcycle_data():
     """ Return inputs and outputs for the motorcycle dataset. We normalise the outputs. """
     import pandas as pd
-    df = pd.read_csv("/home/sebastian.popescu/Desktop/my_code/Dist_DGPs_v2/code/notebooks/data/motor.csv", index_col=0)
+    df = pd.read_csv("/home/sebastian.popescu/Desktop/my_code/GP_package/docs/notebooks/data/motor.csv", index_col=0)
     X, Y = df["times"].values.reshape(-1, 1), df["accel"].values.reshape(-1, 1)
     Y = (Y - Y.mean()) / Y.std()
     X /= X.max()
@@ -60,7 +60,9 @@ config = Config(
 )
 deep_gp: DeepGP = build_constant_input_dim_deep_gp(X, num_layers=2, config=config)
 
+predictions = deep_gp.call(X,Y, training=True)
 
+"""
 model = deep_gp.as_training_model()
 model.compile(tf.optimizers.Adam(1e-2))
 
@@ -95,6 +97,6 @@ ax.set_xlabel('time')
 ax.set_ylabel('acc')
 plt.savefig('./simple_dataset_predictions_testing.png')
 plt.close()
-
+"""
 
 

@@ -156,6 +156,7 @@ class IndependentPosteriorMultiOutput(IndependentPosterior):
     def _conditional_fused(
         self, Xnew: TensorType, full_cov: bool = False, full_output_cov: bool = False
     ) -> MeanAndVariance:
+        
         if isinstance(self.X_data, SharedIndependentInducingVariables) and isinstance(
             self.kernel, SharedIndependent):
             # same as IndependentPosteriorSingleOutput except for following line
@@ -163,6 +164,8 @@ class IndependentPosteriorMultiOutput(IndependentPosterior):
             # we don't call self.kernel() directly as that would do unnecessary tiling
 
             Kmm = Kuus(self.X_data, self.kernel, jitter=default_jitter())  # [M, M]
+            print('--- inside IndependentPosteriorMultiOutput ---')
+            print(Xnew)
             Kmn = Kufs(self.X_data, self.kernel, Xnew)  # [M, N]
 
             fmean, fvar = base_conditional(
