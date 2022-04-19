@@ -183,8 +183,8 @@ class Kernel(Module, metaclass=abc.ABCMeta):
         if (not full_cov) and (X2 is not None):
             raise ValueError("Ambiguous inputs: `not full_cov` and `X2` are not compatible.")
 
-        if not presliced:
-            X, X2 = self.slice(X, X2)
+        #if not presliced:
+        #    X, X2 = self.slice(X, X2)
 
         if not full_cov:
             assert X2 is None

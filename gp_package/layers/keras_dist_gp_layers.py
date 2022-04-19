@@ -169,6 +169,10 @@ class DistGPLayer(tfp.layers.DistributionLambda):
 
         :returns: posterior mean (shape [N, Q]) and (co)variance (shape as above) at test points
         """
+        
+        
+        print('*************check this out****************')
+        print(inputs)
         mean_function = self.mean_function(inputs)
         mean_cond, cov = conditional_GP(
             inputs,
@@ -197,6 +201,10 @@ class DistGPLayer(tfp.layers.DistributionLambda):
         This method also adds a layer-specific loss function, given by the KL divergence between
         this layer and the GP prior (scaled to per-datapoint).
         """
+
+
+        print('*************check this out****************')
+        print(inputs)
         # I think this is getting just the samples from the distribution 
         outputs = super().call(inputs, *args, **kwargs)
 

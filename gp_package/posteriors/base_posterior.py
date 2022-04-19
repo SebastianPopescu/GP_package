@@ -119,6 +119,10 @@ class IndependentPosterior(BasePosterior):
 
         # TODO: this assumes that Xnew has shape [N, D] and no leading dims
 
+        print('*************check this out****************')
+        print('----- inside _get_Kff ---------------------')
+        print(Xnew)
+
         if isinstance(self.kernel, SeparateIndependent):
             # NOTE calling kernel(Xnew, full_cov=full_cov, full_output_cov=False) directly would
             # return
@@ -160,13 +164,22 @@ class IndependentPosteriorMultiOutput(IndependentPosterior):
     def _conditional_fused(
         self, Xnew: Union[TensorType,tfp.distributions.MultivariateNormalDiag], full_cov: bool = False, full_output_cov: bool = False
     ) -> MeanAndVariance:
+        
+        print('****************check this out****************')
+        print('--- inside IndependentPosteriorMultiOutput ---')
+        print(Xnew)
+        
         if isinstance(self.X_data, SharedIndependentInducingVariables) and isinstance(
             self.kernel, SharedIndependent):
             # same as IndependentPosteriorSingleOutput except for following line
+
             Knn = self.kernel.kernel(Xnew, full_cov=full_cov)
             # we don't call self.kernel() directly as that would do unnecessary tiling
 
             Kmm = Kuus(self.X_data, self.kernel, jitter=default_jitter())  # [M, M]
+            print('****************check this out****************')
+            print('--- inside IndependentPosteriorMultiOutput ---')
+            print(Xnew)
             Kmn = Kufs(self.X_data, self.kernel, Xnew)  # [M, N]
 
             fmean, fvar = base_conditional(
@@ -179,8 +192,12 @@ class IndependentPosteriorMultiOutput(IndependentPosterior):
             # we don't call self.kernel() directly as that would do unnecessary tiling
 
             Kmm = Kuus(self.X_data, self.kernel, jitter=default_jitter())  # [M, M]
+            
+            print('****************check this out****************')
+            print('--- inside IndependentPosteriorMultiOutput ---')
+            print(Xnew)
             Kmn = Kufs(self.X_data, self.kernel, Xnew)  # [M, N]
-
+            
             fmean, fvar = base_conditional(
                 Kmn, Kmm, Knn, self.q_mu, full_cov=full_cov, q_sqrt=self.q_sqrt, white=self.whiten
             )  # [N, P],  [P, N, N] or [N, P]

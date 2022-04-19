@@ -20,6 +20,7 @@ from typing import List, Optional, Tuple, Type, Union
 from sklearn.pipeline import FeatureUnion
 
 import tensorflow as tf
+import tensorflow_probability as tfp
 
 from ..base import Module, TensorType
 from ..layers import GPLayer, LikelihoodLayer, Likelihood
@@ -87,9 +88,35 @@ class DistDeepGP(Module):
 
         for count, layer in enumerate(self.f_layers):
             print("--------- we are at layer", count)
+            
             features = layer(features, training=training)            
+            #assert isinstance(features, tfp.distributions.MultivariateNormalDiag)
+            #assert isinstance(features, tf.Tensor)
             
         return features
+
+
+    def _evaluate_layer_wise_dist_deep_gp(
+        self,
+        inputs: TensorType,
+        targets: Optional[TensorType],
+        training: Optional[bool] = None,
+    ) -> tf.Tensor:
+        """
+        Evaluate ``f(x) = fₙ(⋯ (f₂(f₁(x))))`` on the *inputs* argument.
+        """
+        features = inputs
+        hidden_layers = []
+
+        for count, layer in enumerate(self.f_layers):
+            print("--------- we are at layer", count)
+            
+            features = layer(features, training=training)            
+            #assert isinstance(features, tfp.distributions.MultivariateNormalDiag)
+            #assert isinstance(features, tf.Tensor)
+            hidden_layers.append(features)
+
+        return hidden_layers
 
     def _evaluate_likelihood(
         self,

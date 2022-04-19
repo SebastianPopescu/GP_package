@@ -124,6 +124,8 @@ class SharedIndependent(MultioutputKernel):
         self, X: Union[TensorType,tfp.distributions.MultivariateNormalDiag], 
         X2: Optional[Union[TensorType,tfp.distributions.MultivariateNormalDiag]] = None, full_output_cov: bool = True
     ) -> tf.Tensor:
+        print('inside K from Shared Independent')
+        print(X2)
         K = self.kernel.K(X, X2)  # [N, N2]
         if full_output_cov:
             Ks = tf.tile(K[..., None], [1, 1, self.output_dim])  # [N, N2, P]

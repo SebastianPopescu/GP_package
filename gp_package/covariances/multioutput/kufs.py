@@ -18,5 +18,9 @@ def Kufs(
     kernel: SharedIndependent,
     Xnew: tf.Tensor,
 ) -> tf.Tensor:
+
+    print('***********************')
+    print('----- inside Kufs -----')
+    print(Xnew)
     return Kuf(inducing_variable.inducing_variable, kernel.kernel, Xnew)  # [M, N]
 

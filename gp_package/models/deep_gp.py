@@ -87,7 +87,23 @@ class DeepGP(Module):
         for layer in self.f_layers:
             features = layer(features, training=training)
         return features
+    """
+    def _evaluate_layer_wise_deep_gp(
+        self,
+        inputs: TensorType,
+        targets: Optional[TensorType],
+        training: Optional[bool] = None,
+    ) -> tf.Tensor:
+        
+        #Evaluate ``f(x) = fₙ(⋯ (f₂(f₁(x))))`` on the *inputs* argument.
+        features = inputs
+        hidden_layers = []
 
+        for layer in self.f_layers:
+            features = layer(features, training=training)
+            hidden_layers.append(features)
+        return hidden_layers
+    """
     def _evaluate_likelihood(
         self,
         f_outputs: TensorType,
@@ -108,7 +124,7 @@ class DeepGP(Module):
     ) -> tf.Tensor:
         f_outputs = self._evaluate_deep_gp(inputs, targets=targets, training=training)
         y_outputs = self._evaluate_likelihood(f_outputs, targets=targets, training=training)
-        return y_outputs
+        return y_outputs, f_outputs
 
     def predict_f(self, inputs: TensorType) -> Tuple[tf.Tensor, tf.Tensor]:
         """
