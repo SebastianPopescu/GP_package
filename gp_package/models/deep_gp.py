@@ -84,6 +84,8 @@ class DeepGP(Module):
 
         for layer in self.f_layers:
             features = layer(features, training=training)
+            print('-- this are the features --')
+            print(features)
         return features
 
     def _evaluate_likelihood(
