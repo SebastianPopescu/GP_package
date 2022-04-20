@@ -92,9 +92,7 @@ class IsotropicStationary(Stationary):
 
     # Only used for SquaredExponential
     def K(self, X: TensorType, X2: Optional[TensorType] = None) -> tf.Tensor:
-        print('***************')
-        print('--- inside K from IsotropicStationary ----')
-        print(X2)
+        
         r2 = self.scaled_squared_euclid_dist(X, X2)
         return self.K_r2(r2)
 

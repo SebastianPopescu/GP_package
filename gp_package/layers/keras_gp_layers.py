@@ -125,7 +125,7 @@ class GPLayer(tfp.layers.DistributionLambda):
 
         ###### Introduce variational parameters for q(U) #######
         self.q_mu = Parameter(
-            np.zeros((num_inducing, self.num_latent_gps)),
+            np.random.uniform(-0.5, 0.5, (num_inducing, self.num_latent_gps)), # np.zeros((num_inducing, self.num_latent_gps)),
             dtype=default_float(),
             name=f"{self.name}_q_mu" if self.name else "q_mu",
         )  # [num_inducing, num_latent_gps]

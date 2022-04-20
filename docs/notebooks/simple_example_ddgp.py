@@ -56,10 +56,9 @@ single_layer_dgp = DeepGP(gp_layers, likelihood_layer, num_data=X.shape[0])
 """
 
 config = Config(
-    num_inducing=25, inner_layer_qsqrt_factor=1e-5, likelihood_noise_variance=1e-2, whiten=True, hidden_layer_size=X.shape[1]
+    num_inducing=10, inner_layer_qsqrt_factor=1e-1, likelihood_noise_variance=1e-2, whiten=True, hidden_layer_size=X.shape[1]
 )
 dist_deep_gp: DistDeepGP = build_constant_input_dim_dist_deep_gp(X, num_layers=2, config=config)
-
 
 model = dist_deep_gp.as_training_model()
 model.compile(tf.optimizers.Adam(1e-2))

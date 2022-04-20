@@ -25,10 +25,6 @@ def Kuf(
         return kernel(distributional_inducing_points, Xnew)
     
     elif isinstance(inducing_variable, InducingPoints):    
-
-        print('*********************')
-        print('--- inside Kuf ------')
-        print(Xnew) 
         
         return kernel(inducing_variable.Z, Xnew)
 

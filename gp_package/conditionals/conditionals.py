@@ -60,7 +60,4 @@ def conditional_GP(
         mean_function=None,
     )
 
-
-    print('*************check this out****************')
-    print(Xnew)
     return posterior.fused_predict_f(Xnew, full_cov=full_cov, full_output_cov=full_output_cov)

@@ -86,7 +86,6 @@ def _default_summary_fmt_factory() -> Optional[str]:
 # between the built-in 'float' type and the 'float' type defined in the that class.
 Float = Union[float]
 
-
 @dataclass(frozen=True)
 class Config:
     """

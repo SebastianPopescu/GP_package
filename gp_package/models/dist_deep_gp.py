@@ -86,12 +86,8 @@ class DistDeepGP(Module):
         """
         features = inputs
 
-        for count, layer in enumerate(self.f_layers):
-            print("--------- we are at layer", count)
-            
+        for count, layer in enumerate(self.f_layers):            
             features = layer(features, training=training)            
-            #assert isinstance(features, tfp.distributions.MultivariateNormalDiag)
-            #assert isinstance(features, tf.Tensor)
             
         return features
 
@@ -109,11 +105,8 @@ class DistDeepGP(Module):
         hidden_layers = []
 
         for count, layer in enumerate(self.f_layers):
-            print("--------- we are at layer", count)
             
             features = layer(features, training=training)            
-            #assert isinstance(features, tfp.distributions.MultivariateNormalDiag)
-            #assert isinstance(features, tf.Tensor)
             hidden_layers.append(features)
 
         return hidden_layers

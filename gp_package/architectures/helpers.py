@@ -292,7 +292,7 @@ def construct_basic_distributional_inducing_variables(
     if z_init_var is None:
         warnings.warn(
             "No `z_init_var` has been specified in `construct_basic_inducing_variables`. "
-            "Default initialization using random normal N(0, 1) will be used."
+            "Default initialization using random log-normal N(0, 1) will be used."
         )
 
     z_init_var_is_given = z_init_var is not None
@@ -311,14 +311,19 @@ def construct_basic_distributional_inducing_variables(
                 assert len(z_init_mean[i]) == num_ind_var
                 z_init_mean_i = z_init_mean[i]
             else:
-                z_init_mean_i = np.random.randn(num_ind_var, input_dim).astype(dtype=default_float())
+                #z_init_mean_i = np.random.randn(num_ind_var, input_dim).astype(dtype=default_float())
+                z_init_mean_i = np.random.uniform(low=-0.5, high=0.5, size=(num_ind_var, input_dim)).astype(dtype=default_float())
             assert z_init_mean_i.shape == (num_ind_var, input_dim)
             
             if z_init_var_is_given:
                 assert len(z_init_var[i]) == num_ind_var
                 z_init_var_i = z_init_var[i]
             else:
-                z_init_var_i = np.random.lognormal(size=(num_ind_var, input_dim)).astype(dtype=default_float())
+                #z_init_var_i = np.random.lognormal(size=(num_ind_var, input_dim)).astype(dtype=default_float())
+                
+                z_init_var_i = np.ones((num_ind_var, input_dim)) * 0.0067153485
+                z_init_var_i = z_init_var_i.astype(dtype=default_float())
+            
             assert z_init_var_i.shape == (num_ind_var, input_dim)
             
             
@@ -337,7 +342,8 @@ def construct_basic_distributional_inducing_variables(
                     )
                 z_init_mean_o = z_init_mean[o]
             else:
-                z_init_mean_o = np.random.randn(num_inducing, input_dim).astype(dtype=default_float())
+                #z_init_mean_o = np.random.randn(num_inducing, input_dim).astype(dtype=default_float())
+                z_init_mean_o = np.random.uniform(low=-0.5, high=0.5, size=(num_ind_var, input_dim)).astype(dtype=default_float())
 
             if z_init_var_is_given:
                 if z_init_var.shape != (output_dim, num_inducing, input_dim):
@@ -347,8 +353,10 @@ def construct_basic_distributional_inducing_variables(
                     )
                 z_init_var_o = z_init_var[o]
             else:
-                z_init_var_o = np.random.randn(num_inducing, input_dim).astype(dtype=default_float())
-            
+                #z_init_var_o = np.random.lognormal(num_inducing, input_dim).astype(dtype=default_float())
+                z_init_var_o = np.ones((num_ind_var, input_dim)) * 0.0067153485
+                z_init_var_o = z_init_var_o.astype(dtype=default_float())
+
             inducing_variables.append(DistributionalInducingPoints(z_init_mean_o, z_init_var_o))
         return SeparateIndependentDistributionalInducingVariables(inducing_variables)
 
@@ -358,12 +366,12 @@ def construct_basic_distributional_inducing_variables(
         z_init_mean = (
             z_init_mean
             if z_init_mean_is_given
-            else np.random.randn(num_inducing, input_dim).astype(dtype=default_float())
+            else np.random.uniform(low=-0.5, high=0.5, size=(num_inducing, input_dim)).astype(dtype=default_float()) #np.random.randn(num_inducing, input_dim).astype(dtype=default_float())
         )
         z_init_var = (
             z_init_var
             if z_init_var_is_given
-            else np.random.lognormal(size=(num_inducing, input_dim)).astype(dtype=default_float())
+            else 0.0067153485 * np.ones((num_inducing, input_dim)).astype(dtype=default_float())     #np.random.lognormal(size=(num_inducing, input_dim)).astype(dtype=default_float())
         )
         shared_ip = DistributionalInducingPoints(z_init_mean, z_init_var)
         return SharedIndependentDistributionalInducingVariables(shared_ip)

@@ -80,13 +80,14 @@ def _construct_euclidean_kernel(input_dim: int, is_last_layer: bool) -> SquaredE
 
     :param input_dim: The input dimensionality of the layer.
     :param is_last_layer: Whether the kernel is part of the last layer in the Deep GP.
-    """
-    variance = 1e-6 if not is_last_layer else 1.0
+    """ 
+    ### Custom values taken from DistDGP paper 
+    variance = 1.351 if not is_last_layer else 1.351
 
     # TODO: Looking at this initializing to 2 (assuming N(0, 1) or U[0,1] normalized
     # data) seems a bit weird - that's really long lengthscales? And I remember seeing
     # something where the value scaled with the number of dimensions before
-    lengthscales = [2.0] * input_dim
+    lengthscales = [1.351] * input_dim
     return SquaredExponential(lengthscales=lengthscales, variance=variance)
 
 def _construct_hybrid_kernel(input_dim: int, is_last_layer: bool) -> Hybrid:
@@ -98,12 +99,13 @@ def _construct_hybrid_kernel(input_dim: int, is_last_layer: bool) -> Hybrid:
     :param input_dim: The input dimensionality of the layer.
     :param is_last_layer: Whether the kernel is part of the last layer in the Deep GP.
     """
-    variance = 1e-6 if not is_last_layer else 1.0
+    variance = 1.351 if not is_last_layer else 1.351
 
     # TODO: Looking at this initializing to 2 (assuming N(0, 1) or U[0,1] normalized
     # data) seems a bit weird - that's really long lengthscales? And I remember seeing
     # something where the value scaled with the number of dimensions before
-    lengthscales = [2.0] * input_dim
+    lengthscales = [1.351] * input_dim
+
     return Hybrid(lengthscales=lengthscales, variance=variance)
 
 
@@ -136,6 +138,10 @@ def build_constant_input_dim_dist_deep_gp(X: np.ndarray, num_layers: int, config
     gp_layers = []
     centroids, _ = kmeans2(X, k=config.num_inducing, minit="points")
 
+    ############################################
+    ############# Euclidean space ##############
+    ############################################
+
     i_layer = 0
     ### First layer is standard Euclidean-space SVGP ###
     is_last_layer = i_layer == num_layers - 1
@@ -164,8 +170,9 @@ def build_constant_input_dim_dist_deep_gp(X: np.ndarray, num_layers: int, config
         X_running = mean_function(X_running)
         if tf.is_tensor(X_running):
             X_running = X_running.numpy()
-        q_sqrt_scaling = config.inner_layer_qsqrt_factor
-
+        
+        #q_sqrt_scaling = config.inner_layer_qsqrt_factor
+        q_sqrt_scaling = 1e-1
 
     layer = GPLayer(
         kernel,
@@ -178,8 +185,9 @@ def build_constant_input_dim_dist_deep_gp(X: np.ndarray, num_layers: int, config
     layer.q_sqrt.assign(layer.q_sqrt * q_sqrt_scaling)
     gp_layers.append(layer)
 
-
-    ### Subsequent layers are Wasserstein-2 space SVGP ####
+    ################################################################
+    ############# Joint Euclidean & Wasserstein-2 space ############
+    ################################################################
 
     for i_layer in range(1, num_layers):
         is_last_layer = i_layer == num_layers - 1
@@ -208,7 +216,9 @@ def build_constant_input_dim_dist_deep_gp(X: np.ndarray, num_layers: int, config
             X_running = mean_function(X_running)
             if tf.is_tensor(X_running):
                 X_running = X_running.numpy()
-            q_sqrt_scaling = config.inner_layer_qsqrt_factor
+            #q_sqrt_scaling = config.inner_layer_qsqrt_factor
+            q_sqrt_scaling = 1e-1
+
 
         layer = DistGPLayer(
             kernel,

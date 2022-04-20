@@ -107,7 +107,6 @@ class BasePosterior(AbstractPosterior):
             self._q_dist = _MvNormal(q_mu, q_sqrt)
     """
 
-
 class IndependentPosterior(BasePosterior):
     
     def _post_process_mean_and_cov(
@@ -118,10 +117,6 @@ class IndependentPosterior(BasePosterior):
     def _get_Kff(self, Xnew: Union[TensorType,tfp.distributions.MultivariateNormalDiag], full_cov: bool) -> tf.Tensor:
 
         # TODO: this assumes that Xnew has shape [N, D] and no leading dims
-
-        print('*************check this out****************')
-        print('----- inside _get_Kff ---------------------')
-        print(Xnew)
 
         if isinstance(self.kernel, SeparateIndependent):
             # NOTE calling kernel(Xnew, full_cov=full_cov, full_output_cov=False) directly would
@@ -152,7 +147,7 @@ class IndependentPosteriorSingleOutput(IndependentPosterior):
         # line:
         Knn = self.kernel(Xnew, full_cov=full_cov)
 
-        Kmm = Kuu(self.X_data, self.kernel, jitter=default_jitter())  # [M, M]
+        Kmm = Kuu(self.X_data, self.kernel, jitter=1e-3)  # [M, M]
         Kmn = Kuf(self.X_data, self.kernel, Xnew)  # [M, N]
 
         fmean, fvar = base_conditional(
@@ -165,10 +160,6 @@ class IndependentPosteriorMultiOutput(IndependentPosterior):
         self, Xnew: Union[TensorType,tfp.distributions.MultivariateNormalDiag], full_cov: bool = False, full_output_cov: bool = False
     ) -> MeanAndVariance:
         
-        print('****************check this out****************')
-        print('--- inside IndependentPosteriorMultiOutput ---')
-        print(Xnew)
-        
         if isinstance(self.X_data, SharedIndependentInducingVariables) and isinstance(
             self.kernel, SharedIndependent):
             # same as IndependentPosteriorSingleOutput except for following line
@@ -176,10 +167,7 @@ class IndependentPosteriorMultiOutput(IndependentPosterior):
             Knn = self.kernel.kernel(Xnew, full_cov=full_cov)
             # we don't call self.kernel() directly as that would do unnecessary tiling
 
-            Kmm = Kuus(self.X_data, self.kernel, jitter=default_jitter())  # [M, M]
-            print('****************check this out****************')
-            print('--- inside IndependentPosteriorMultiOutput ---')
-            print(Xnew)
+            Kmm = Kuus(self.X_data, self.kernel, jitter=1e-3)  # [M, M]
             Kmn = Kufs(self.X_data, self.kernel, Xnew)  # [M, N]
 
             fmean, fvar = base_conditional(
@@ -191,11 +179,7 @@ class IndependentPosteriorMultiOutput(IndependentPosterior):
             Knn = self.kernel.kernel(Xnew, full_cov=full_cov)
             # we don't call self.kernel() directly as that would do unnecessary tiling
 
-            Kmm = Kuus(self.X_data, self.kernel, jitter=default_jitter())  # [M, M]
-            
-            print('****************check this out****************')
-            print('--- inside IndependentPosteriorMultiOutput ---')
-            print(Xnew)
+            Kmm = Kuus(self.X_data, self.kernel, jitter=1e-3)  # [M, M]
             Kmn = Kufs(self.X_data, self.kernel, Xnew)  # [M, N]
             
             fmean, fvar = base_conditional(

@@ -36,7 +36,6 @@ def eye(num: int, value: tf.Tensor, dtype: Optional[tf.DType] = None) -> tf.Tens
         value = cast(value, dtype)
     return tf.linalg.diag(tf.fill([num], value))
 
-
 def leading_transpose(tensor: tf.Tensor, perm: List[Any], leading_dim: int = 0) -> tf.Tensor:
     """
     Transposes tensors with leading dimensions. Leading dimensions in
@@ -118,8 +117,37 @@ def square_distance(X: tf.Tensor, X2: Optional[tf.Tensor]) -> tf.Tensor:
     dist += broadcasting_elementwise(tf.add, Xs, X2s)
     return dist
 
-
 def wasserstein_2_distance(mu1 : tfp.distributions.MultivariateNormalDiag, mu2 : Optional[tfp.distributions.MultivariateNormalDiag]) -> tf.Tensor:
+
+
+
+    """
+    Wasserstein-2 distance between multivariate normal distributions with diagonal covariance
+    Implementation based on classic Downson & Landau, 1982 formula 
+    """
+
+    # Warning -- only works with diagonal covariance matrices as the Wasserstein-2 based kernel is valid only for univariate Gaussians
+    # Otherwise -- need to have a look at Sliced Wasserstein-2 distances and build kernels on that
+    assert isinstance(mu1, tfp.distributions.MultivariateNormalDiag)
+    mu1_mean = mu1.loc # shape - (N,D)
+    mu1_var = mu1.scale.diag**2 # shape - (N,D))
+
+    if mu2 is None:
+
+        return tf.square(difference_matrix(mu1_mean, mu1_mean)) + add_matrix(mu1_var, mu1_var) - 2.0 * tf.sqrt(multiply_matrix(mu1_var, mu1_var)) # shape - (N,N,D)
+
+    assert isinstance(mu2, tfp.distributions.MultivariateNormalDiag)
+    
+    mu2_mean = mu2.loc # shape - (M,D)
+    mu2_var = mu2.scale.diag**2 # shape - (M,D)
+
+    #first_part = add_matrix(mu1_var, mu2_var)
+    #first_part -= 2.0 * tf.sqrt(multiply_matrix(mu1_var, mu2_var))
+
+    return tf.square(difference_matrix(mu1_mean, mu2_mean)) + add_matrix(mu1_var, mu2_var) - 2.0 * tf.sqrt(multiply_matrix(mu1_var, mu2_var)) # shape - (N,M,D)
+
+
+def wasserstein_2_distance_simplified(mu1 : tfp.distributions.MultivariateNormalDiag, mu2 : Optional[tfp.distributions.MultivariateNormalDiag]) -> tf.Tensor:
 
     """
     Wasserstein-2 distance between multivariate normal distributions with diagonal covariance
@@ -162,6 +190,56 @@ def difference_matrix(X: tf.Tensor, X2: Optional[tf.Tensor]) -> tf.Tensor:
     diff = X[:, tf.newaxis, :] - X2[tf.newaxis, :, :]
     diff = tf.reshape(diff, tf.concat((Xshape[:-1], X2shape[:-1], [Xshape[-1]]), 0))
     return diff
+
+
+def multiply_matrix(X: tf.Tensor, X2: Optional[tf.Tensor]) -> tf.Tensor:
+    
+    """
+    Returns (X * X2ᵀ)
+
+    This function can deal with leading dimensions in X and X2.
+    For example, If X has shape [M, D] and X2 has shape [N, D],
+    the output will have shape [M, N, D]. If X has shape [I, J, M, D]
+    and X2 has shape [K, L, N, D], the output will have shape
+    [I, J, M, K, L, N, D].
+    """
+    if X2 is None:
+        X2 = X
+        diff = X[..., :, tf.newaxis, :] - X2[..., tf.newaxis, :, :]
+        return diff
+    Xshape = tf.shape(X)
+    X2shape = tf.shape(X2)
+    X = tf.reshape(X, (-1, Xshape[-1]))
+    X2 = tf.reshape(X2, (-1, X2shape[-1]))
+    mul = X[:, tf.newaxis, :] * X2[tf.newaxis, :, :]
+    mul = tf.reshape(mul, tf.concat((Xshape[:-1], X2shape[:-1], [Xshape[-1]]), 0))
+    
+    return mul
+
+
+def add_matrix(X: tf.Tensor, X2: Optional[tf.Tensor]) -> tf.Tensor:
+    
+    """
+    Returns (X + X2ᵀ)
+
+    This function can deal with leading dimensions in X and X2.
+    For example, If X has shape [M, D] and X2 has shape [N, D],
+    the output will have shape [M, N, D]. If X has shape [I, J, M, D]
+    and X2 has shape [K, L, N, D], the output will have shape
+    [I, J, M, K, L, N, D].
+    """
+    if X2 is None:
+        X2 = X
+        diff = X[..., :, tf.newaxis, :] - X2[..., tf.newaxis, :, :]
+        return diff
+    Xshape = tf.shape(X)
+    X2shape = tf.shape(X2)
+    X = tf.reshape(X, (-1, Xshape[-1]))
+    X2 = tf.reshape(X2, (-1, X2shape[-1]))
+    mul = X[:, tf.newaxis, :] + X2[tf.newaxis, :, :]
+    mul = tf.reshape(mul, tf.concat((Xshape[:-1], X2shape[:-1], [Xshape[-1]]), 0))
+    
+    return mul
 
 
 def pca_reduce(X: tf.Tensor, latent_dim: tf.Tensor) -> tf.Tensor:
