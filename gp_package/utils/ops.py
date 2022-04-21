@@ -117,9 +117,7 @@ def square_distance(X: tf.Tensor, X2: Optional[tf.Tensor]) -> tf.Tensor:
     dist += broadcasting_elementwise(tf.add, Xs, X2s)
     return dist
 
-def wasserstein_2_distance(mu1 : tfp.distributions.MultivariateNormalDiag, mu2 : Optional[tfp.distributions.MultivariateNormalDiag]) -> tf.Tensor:
-
-
+def wasserstein_2_distance_original_formula(mu1 : tfp.distributions.MultivariateNormalDiag, mu2 : Optional[tfp.distributions.MultivariateNormalDiag]) -> tf.Tensor:
 
     """
     Wasserstein-2 distance between multivariate normal distributions with diagonal covariance
@@ -147,7 +145,7 @@ def wasserstein_2_distance(mu1 : tfp.distributions.MultivariateNormalDiag, mu2 :
     return tf.square(difference_matrix(mu1_mean, mu2_mean)) + add_matrix(mu1_var, mu2_var) - 2.0 * tf.sqrt(multiply_matrix(mu1_var, mu2_var)) # shape - (N,M,D)
 
 
-def wasserstein_2_distance_simplified(mu1 : tfp.distributions.MultivariateNormalDiag, mu2 : Optional[tfp.distributions.MultivariateNormalDiag]) -> tf.Tensor:
+def wasserstein_2_distance(mu1 : tfp.distributions.MultivariateNormalDiag, mu2 : Optional[tfp.distributions.MultivariateNormalDiag]) -> tf.Tensor:
 
     """
     Wasserstein-2 distance between multivariate normal distributions with diagonal covariance

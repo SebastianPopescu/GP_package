@@ -59,7 +59,7 @@ def deepcopy(input_module: M, memo: Optional[Dict[int, Any]] = None) -> M:
     """
     return copy.deepcopy(reset_cache_bijectors(input_module), memo)  # type: ignore
 
-from ..layers import GPLayer
+from ..layers import GPLayer, DistGPLayer
 from ..mean_functions import MeanFunction, Identity, Linear, Zero
 from ..utils import set_trainable
 
@@ -343,7 +343,7 @@ def construct_basic_distributional_inducing_variables(
                 z_init_mean_o = z_init_mean[o]
             else:
                 #z_init_mean_o = np.random.randn(num_inducing, input_dim).astype(dtype=default_float())
-                z_init_mean_o = np.random.uniform(low=-0.5, high=0.5, size=(num_ind_var, input_dim)).astype(dtype=default_float())
+                z_init_mean_o = np.random.uniform(low=-0.5, high=0.5, size=(num_inducing, input_dim)).astype(dtype=default_float())
 
             if z_init_var_is_given:
                 if z_init_var.shape != (output_dim, num_inducing, input_dim):
@@ -354,7 +354,7 @@ def construct_basic_distributional_inducing_variables(
                 z_init_var_o = z_init_var[o]
             else:
                 #z_init_var_o = np.random.lognormal(num_inducing, input_dim).astype(dtype=default_float())
-                z_init_var_o = np.ones((num_ind_var, input_dim)) * 0.0067153485
+                z_init_var_o = np.ones((num_inducing, input_dim)) * 0.0067153485
                 z_init_var_o = z_init_var_o.astype(dtype=default_float())
 
             inducing_variables.append(DistributionalInducingPoints(z_init_mean_o, z_init_var_o))
@@ -375,7 +375,6 @@ def construct_basic_distributional_inducing_variables(
         )
         shared_ip = DistributionalInducingPoints(z_init_mean, z_init_var)
         return SharedIndependentDistributionalInducingVariables(shared_ip)
-
 
 
 def construct_mean_function(
@@ -473,7 +472,7 @@ def construct_dist_gp_layer(
     z_init_mean: Optional[np.ndarray] = None,
     z_init_var: Optional[np.ndarray] = None,
     name: Optional[str] = None,
-) -> GPLayer:
+) -> DistGPLayer:
     """
     Builds a vanilla GP layer with a single kernel shared among all outputs,
         shared inducing point variables and zero mean function.
@@ -506,7 +505,7 @@ def construct_dist_gp_layer(
         z_init_mean=z_init_mean,
         z_init_var=z_init_var,
     )
-    dist_gp_layer = GPLayer(
+    dist_gp_layer = DistGPLayer(
         kernel=kernel,
         inducing_variable=inducing_variable,
         num_data=num_data,

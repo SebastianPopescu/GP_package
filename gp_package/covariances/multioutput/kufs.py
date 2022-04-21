@@ -7,6 +7,7 @@ from gp_package.covariances.kuf import Kuf
 from ...base import TensorLike, TensorType
 from ...inducing_variables import SharedIndependentInducingVariables, SharedIndependentDistributionalInducingVariables
 from ...kernels import SharedIndependent
+import tensorflow_probability as tfp
 
 """
 def _Kuf(inducing_variable, kernel, Xnew):
@@ -16,7 +17,7 @@ def _Kuf(inducing_variable, kernel, Xnew):
 def Kufs(
     inducing_variable: Union[SharedIndependentInducingVariables,SharedIndependentDistributionalInducingVariables],
     kernel: SharedIndependent,
-    Xnew: tf.Tensor,
+    Xnew: Union[tf.Tensor, tfp.distributions.MultivariateNormalDiag],
 ) -> tf.Tensor:
 
     return Kuf(inducing_variable.inducing_variable, kernel.kernel, Xnew)  # [M, N]

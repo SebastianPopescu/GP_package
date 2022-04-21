@@ -171,8 +171,7 @@ class DistGPLayer(tfp.layers.DistributionLambda):
         """
         
         
-        print('*************check this out****************')
-        print(inputs)
+        
         mean_function = self.mean_function(inputs)
         mean_cond, cov = conditional_GP(
             inputs,
@@ -245,6 +244,8 @@ class DistGPLayer(tfp.layers.DistributionLambda):
         :param previous_layer_outputs: The output from the previous layer,
             which should be coercible to a `tf.Tensor`
         """
+        
+        
         mean, cov = self.predict(
             previous_layer_outputs,
             full_cov=self.full_cov,
@@ -263,6 +264,10 @@ class DistGPLayer(tfp.layers.DistributionLambda):
             )  # loc: [N, Q], scale: [N, Q, Q]
         elif not self.full_cov and not self.full_output_cov:
             # mean: [N, Q], cov: [N, Q]
+            tf.debugging.assert_greater(cov, tf.zeros_like(cov, dtype = default_float()), 
+                message="Unverlying covariance matrix is not positive", 
+                name = "assert_cov_g_zero")
+
             return tfp.distributions.MultivariateNormalDiag(loc=mean, scale_diag=tf.sqrt(cov))
         else:
             raise NotImplementedError(

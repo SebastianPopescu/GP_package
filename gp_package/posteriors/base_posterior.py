@@ -147,7 +147,7 @@ class IndependentPosteriorSingleOutput(IndependentPosterior):
         # line:
         Knn = self.kernel(Xnew, full_cov=full_cov)
 
-        Kmm = Kuu(self.X_data, self.kernel, jitter=1e-3)  # [M, M]
+        Kmm = Kuu(self.X_data, self.kernel, jitter=default_jitter())  # [M, M]
         Kmn = Kuf(self.X_data, self.kernel, Xnew)  # [M, N]
 
         fmean, fvar = base_conditional(
@@ -167,7 +167,7 @@ class IndependentPosteriorMultiOutput(IndependentPosterior):
             Knn = self.kernel.kernel(Xnew, full_cov=full_cov)
             # we don't call self.kernel() directly as that would do unnecessary tiling
 
-            Kmm = Kuus(self.X_data, self.kernel, jitter=1e-3)  # [M, M]
+            Kmm = Kuus(self.X_data, self.kernel, jitter=default_jitter())  # [M, M]
             Kmn = Kufs(self.X_data, self.kernel, Xnew)  # [M, N]
 
             fmean, fvar = base_conditional(
@@ -179,7 +179,7 @@ class IndependentPosteriorMultiOutput(IndependentPosterior):
             Knn = self.kernel.kernel(Xnew, full_cov=full_cov)
             # we don't call self.kernel() directly as that would do unnecessary tiling
 
-            Kmm = Kuus(self.X_data, self.kernel, jitter=1e-3)  # [M, M]
+            Kmm = Kuus(self.X_data, self.kernel, jitter=default_jitter())  # [M, M]
             Kmn = Kufs(self.X_data, self.kernel, Xnew)  # [M, N]
             
             fmean, fvar = base_conditional(

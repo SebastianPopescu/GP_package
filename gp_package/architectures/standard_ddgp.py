@@ -171,8 +171,8 @@ def build_constant_input_dim_dist_deep_gp(X: np.ndarray, num_layers: int, config
         if tf.is_tensor(X_running):
             X_running = X_running.numpy()
         
-        #q_sqrt_scaling = config.inner_layer_qsqrt_factor
-        q_sqrt_scaling = 1e-1
+        q_sqrt_scaling = config.inner_layer_qsqrt_factor
+
 
     layer = GPLayer(
         kernel,
@@ -216,10 +216,8 @@ def build_constant_input_dim_dist_deep_gp(X: np.ndarray, num_layers: int, config
             X_running = mean_function(X_running)
             if tf.is_tensor(X_running):
                 X_running = X_running.numpy()
-            #q_sqrt_scaling = config.inner_layer_qsqrt_factor
-            q_sqrt_scaling = 1e-1
-
-
+            q_sqrt_scaling = config.inner_layer_qsqrt_factor
+            
         layer = DistGPLayer(
             kernel,
             inducing_var,
