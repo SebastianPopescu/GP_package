@@ -12,7 +12,7 @@ from gp_package.inverse_approximations import inverse_approximation
 from ..base import Parameter, TensorType
 from ..config import default_float
 
-from ..kullback_leiblers import standard_kl
+from ..kullback_leiblers import standard_kl_T
 from ..mean_functions import Identity, MeanFunction
 
 from ..conditionals import conditional_GP
@@ -108,8 +108,8 @@ class TLayer(tfp.layers.DistributionLambda):
         
         #TODO -- import the proper standard_kl for Wishart distributions
         #TODO -- make the right changes to the arguments
-        return standard_kl(
-            self.inducing_variable, self.kernel, self.q_mu, self.q_sqrt, whiten=self.whiten
+        return standard_kl_T(
+            
         )
 
     def _make_distribution_fn(
@@ -125,8 +125,7 @@ class TLayer(tfp.layers.DistributionLambda):
         df = self.inverse_approximation.dof + self.num_inducing + 1.
 
         return tfp.distributions.WishartTriL(
-                df=df, scale_tril=self.inverse_approximation.L_T)
-            )  # df: [1,], scale_tril: [M, M]
+                df=df, scale_tril=self.inverse_approximation.L_T) # df: [1,], scale_tril: [M, M]
 
     def _convert_to_tensor_fn(self, distribution: tfp.distributions.Distribution) -> tf.Tensor:
         """

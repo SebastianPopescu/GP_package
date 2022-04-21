@@ -14,12 +14,12 @@
 
 import copy
 from typing import Any, Callable, List, Optional, Union
+from gpflow import default_jitter
 
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from ..base import AnyNDArray
-
+from ..base import AnyNDArray, TensorLike
 
 def cast(
     value: Union[tf.Tensor, AnyNDArray], dtype: tf.DType, name: Optional[str] = None
@@ -29,7 +29,6 @@ def cast(
         # workaround for https://github.com/tensorflow/tensorflow/issues/35938
         return tf.convert_to_tensor(value, dtype, name=name)
     return tf.cast(value, dtype, name=name)
-
 
 def eye(num: int, value: tf.Tensor, dtype: Optional[tf.DType] = None) -> tf.Tensor:
     if dtype is not None:
@@ -157,3 +156,19 @@ def pca_reduce(X: tf.Tensor, latent_dim: tf.Tensor) -> tf.Tensor:
     evals, evecs = tf.linalg.eigh(X_cov)
     W = evecs[:, -latent_dim:]
     return (X - tf.reduce_mean(X, axis=0, keepdims=True)) @ W
+
+def condition(X : tf.Tensor) -> tf.Tensor:
+
+    size_matrix = tf.shape[0]
+    X += default_jitter() * tf.eye(size_matrix, dtype=X.dtype)
+
+    return X
+
+def inverse_cholesky(X : tf.Tensor) -> tf.Tensor:
+
+    """
+        
+    """
+
+    return tf.linalg.triangular_solve(X, tf.eye(tf.shape(X).as_list()[0], dtype = X.dtype), lower = True)  
+

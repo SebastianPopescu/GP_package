@@ -1,6 +1,8 @@
 from .bijectors import *
 from .misc import *
 from .model_utils import *
+from .ops import *
+
 
 
 __all__ = ["positive", "triangular", "triangular_size",
@@ -9,7 +11,8 @@ __all__ = ["positive", "triangular", "triangular_size",
     "to_default_float",
     "to_default_int",
     "training_loop",
-    "add_noise_cov"
+    "add_noise_cov",
+    "condition"
 ]
 
 

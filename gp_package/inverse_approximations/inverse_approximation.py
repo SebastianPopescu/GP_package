@@ -57,6 +57,14 @@ class InverseApproximation(Module):
         self.dof = dof
 
 
+    def get_cholesky_inverse(self):
+
+        # TODO -- get inverse from utils.ops.
+        L_T_inv = 
+
+        return L_T_inv
+
+
 
 
 
