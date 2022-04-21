@@ -29,16 +29,21 @@ def standard_kl(
     kernel: Kernel,
     q_mu: TensorType,
     q_sqrt: TensorType,
+    Sigma_mm_inverse: TensorType,
     whiten: bool = False,
 ) -> tf.Tensor:
     if whiten:
-        return gauss_kl(q_mu, q_sqrt, None)
+        return gauss_kl_inverse_free(q_mu, q_sqrt, Sigma_mm_inverse, None)
     else:
         K = Kuu(inducing_variable, kernel, jitter=default_jitter())  # [P, M, M] or [M, M]
-        return gauss_kl(q_mu, q_sqrt, K)
+        return gauss_kl_inverse_free(q_mu, q_sqrt, Sigma_mm_inverse, K)
 
-def gauss_kl(
-    q_mu: TensorType, q_sqrt: TensorType, K: TensorType = None, *, K_cholesky: TensorType = None
+def gauss_kl_inverse_free(
+    q_mu: TensorType, 
+    q_sqrt: TensorType, 
+    Sigma_mm_inverse : TensorType,
+    K: TensorType = None, 
+    *, K_cholesky: TensorType = None
 ) -> tf.Tensor:
     """
     Compute the KL divergence KL[q || p] between
