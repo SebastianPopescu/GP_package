@@ -159,6 +159,11 @@ def pca_reduce(X: tf.Tensor, latent_dim: tf.Tensor) -> tf.Tensor:
 
 def condition(X : tf.Tensor) -> tf.Tensor:
 
+    """
+    TODO -- document this function
+    """
+
+
     size_matrix = tf.shape[0]
     X += default_jitter() * tf.eye(size_matrix, dtype=X.dtype)
 
@@ -167,7 +172,7 @@ def condition(X : tf.Tensor) -> tf.Tensor:
 def inverse_cholesky(X : tf.Tensor) -> tf.Tensor:
 
     """
-        
+    TODO -- document this function
     """
 
     return tf.linalg.triangular_solve(X, tf.eye(tf.shape(X).as_list()[0], dtype = X.dtype), lower = True)  

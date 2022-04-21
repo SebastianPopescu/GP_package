@@ -26,8 +26,8 @@ def standard_kl_T(
     df_p : TensorType, 
     inducing_variable : InducingVariables,
     kernel : Kernel, 
-    g : tf.Tensor, 
-    use_diagnostics : bool = False) -> tf.Tensor:
+    g : tf.Tensor 
+    ) -> tf.Tensor:
 
     """
     Compute the KL divergence KL[q || p] between
@@ -87,7 +87,6 @@ def standard_kl_T(
     trace_term_hutch_second_part = tf.linalg.matmul(q_Kuu_inv, g, transpose_b = True) ### shape (M, num_hutch_samples)
     trace_term_hutch  = tf.multiply(trace_term_hutch_first_part, tf.transpose(trace_term_hutch_second_part)) ### shape (num_hutch_samples, M)
     trace_term_hutch  = tf.reduce_mean(tf.reduce_sum(trace_term_hutch, axis = 1))
-
     
     kl_term+= 0.5 * inverse_approximation.dof * ( trace_term_hutch - inducing_variable.num_inducing )
 
