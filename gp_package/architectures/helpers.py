@@ -132,10 +132,6 @@ def construct_basic_hybrid_kernel(
         mo_kern = SharedIndependent(kernels, output_dim)
     return mo_kern
 
-
-
-
-
 def construct_basic_inducing_variables(
     num_inducing: Union[int, List[int]],
     input_dim: int,
