@@ -138,7 +138,7 @@ def base_conditional_with_lm(
 
 
 def conditional_GP(q_mu, q_sqrt, Knn, Kmn, Kmm,
-    white=True, full_cov=True):
+    white=True, full_cov=False):
 
     """
     This only works for whitened case
@@ -148,33 +148,31 @@ def conditional_GP(q_mu, q_sqrt, Knn, Kmn, Kmm,
 
     Lm = tf.linalg.cholesky(Kmm)
     A = tf.linalg.triangular_solve(Lm, Kmn, lower=True)
-    inv_lm_t_A = tf.linalg.triangular_solve(tf.transpose(Lm), A, lower=False)
     
-    fmean = tf.matmul(inv_lm_t_A, q_mu, transpose_a = True) 
-    dim_layer = q_mu.get_shape().as_list()[-1]
+    if full_cov:
+        fvar_distributional = Knn - tf.matmul(A, A, transpose_a=True)
+    else:
+        fvar_distributional = Knn[:,tf.newaxis] - tf.transpose(tf.reduce_sum(tf.square(A), 0, keepdims=True))
+        print('fvar_distributional ', fvar_distributional)
+    
+    # another backsubstitution in the unwhitened case
+    if not white:
+        A = tf.linalg.triangular_solve(tf.transpose(Lm), A, lower=False)
+
+    fmean = tf.matmul(A, q_mu, transpose_a = True) 
 
     if full_cov:
         LTA= tf.matmul(q_sqrt,A, transpose_a = True)
         fvar_epistemic = tf.matmul(LTA,LTA,transpose_a=True)
     else:
-        A = tf.tile(tf.expand_dims(A, axis=0),[ dim_layer,1,1])
+        A = tf.tile(tf.expand_dims(A, axis=0),[ 1,1,1])
         LTA= tf.matmul(q_sqrt,A, transpose_a = True)
-        fvar_epistemic = tf.transpose(tf.reduce_sum(tf.square(LTA),1,keepdims=False))
-
-    Lm = tf.linalg.cholesky(Kmm)
-    A = tf.linalg.triangular_solve(Lm, Kmn, lower=True)
-    A = tf.tile(tf.expand_dims(A, axis=0),[ dim_layer,1,1])
-
-    if full_cov:
-        fvar_distributional = Knn - tf.matmul(A, A, transpose_a=True)
-    else:
-
-        fvar_distributional = Knn - tf.transpose(tf.reduce_sum(tf.square(A), 1,keepdims=False))
+        fvar_epistemic = tf.transpose(tf.reduce_sum(tf.square(LTA), 1, keepdims=False))
+        print("fvar_epistemic", fvar_epistemic)
 
     fvar = fvar_epistemic + fvar_distributional
 
     return fmean, fvar
-
 
 
 def Kuu(
@@ -190,7 +188,6 @@ def Kuu(
         Kzz = kernel(inducing_variable.Z)
     Kzz += jitter * tf.eye(inducing_variable.num_inducing, dtype=Kzz.dtype)
     return Kzz
-
 
 
 def Kuf(
@@ -210,8 +207,6 @@ def Kuf(
     elif isinstance(inducing_variable, InducingPoints):    
         
         return kernel(inducing_variable.Z, Xnew)
-
-
 
 
 class ToyData1D(object):
@@ -268,7 +263,7 @@ if __name__=="__main__":
 
     num_data, d_xim = X.shape
 
-    NUM_INDUCING = 10
+    NUM_INDUCING = 20
 
     kernel_euclidean = SquaredExponential()
     inducing_variable_euclidean = InducingPoints(
@@ -276,9 +271,9 @@ if __name__=="__main__":
 
     Kuu_euclidean = Kuu(inducing_variable_euclidean, kernel_euclidean)
     print("Kuu euclidean -- ", Kuu_euclidean)
-    Kuf_euclidean = Kuf(inducing_variable_euclidean, kernel_euclidean, X)
+    Kuf_euclidean = Kuf(inducing_variable_euclidean, kernel_euclidean, X[:10,...])
     print("Kuf euclidean -- ", Kuf_euclidean)
-    Kff_euclidean = kernel_euclidean.K_diag(X)
+    Kff_euclidean = kernel_euclidean(X[:10,...], full_cov=False)
     print("Kff euclidean -- ", Kff_euclidean)
 
     ###### Introduce variational parameters for q(U) #######
@@ -288,16 +283,13 @@ if __name__=="__main__":
     )  # [num_inducing, num_latent_gps]
 
     q_sqrt = Parameter(
-        np.stack([np.eye(NUM_INDUCING) for _ in range(1)]),
+        np.stack([1e-1 * np.eye(NUM_INDUCING) for _ in range(1)]),
         transform=triangular(),
         name="q_sqrt_EUCLIDEAN",
     )  # [num_latent_gps, num_inducing, num_inducing]
 
-    f1_mean, f1_var = base_conditional(Kuf_euclidean, Kuu_euclidean, Kff_euclidean, q_mu, q_sqrt)
+    f1_mean, f1_var = base_conditional(Kuf_euclidean, Kuu_euclidean, Kff_euclidean, q_mu, full_cov = False, q_sqrt = q_sqrt, white = True)
     f1_mean_v2, f1_var_v2 = conditional_GP(q_mu, q_sqrt, Kff_euclidean, Kuf_euclidean, Kuu_euclidean, white=True, full_cov=False)
-
-    tf.debugging.assert_equal(f1_mean, f1_mean_v2, message = "problem with f1_mean")
-    tf.debugging.assert_equal(f1_var, f1_var_v2, message = "problem with f1_var")
 
 
     print('f1_mean -- ', f1_mean)
@@ -305,6 +297,9 @@ if __name__=="__main__":
 
     print('f1_mean_v2 -- ', f1_mean_v2)
     print('f1_var_v2 -- ', f1_var_v2)
+
+    tf.debugging.assert_equal(f1_mean, f1_mean_v2, message = "problem with f1_mean")
+    tf.debugging.assert_equal(f1_var, f1_var_v2, message = "problem with f1_var")
 
     kernel_hyrbid = Hybrid()
     z_init_mean = np.random.uniform(low=-0.5, high=0.5, size=(NUM_INDUCING, 1))
@@ -314,11 +309,11 @@ if __name__=="__main__":
     F1_dist = tfp.distributions.MultivariateNormalDiag(loc = f1_mean, scale_diag = tf.sqrt(f1_var))
 
     Kuu_wass = Kuu(inducing_variable_distributional, kernel_hyrbid)
-    print("Kuu wass -- ", Kuu_wass)
+    #print("Kuu wass -- ", Kuu_wass)
     Kuf_wass = Kuf(inducing_variable_distributional, kernel_hyrbid, F1_dist)
-    print("Kuf wass -- ", Kuf_wass)
-    Kff_wass = kernel_hyrbid.K_diag(F1_dist)
-    print("Kff wass -- ", Kff_wass)
+    #print("Kuf wass -- ", Kuf_wass)
+    Kff_wass = kernel_hyrbid(F1_dist, full_cov=False)
+    #print("Kff wass -- ", Kff_wass)
 
     ###### Introduce variational parameters for q(U) #######
     q_mu = Parameter(
@@ -327,17 +322,16 @@ if __name__=="__main__":
     )  # [num_inducing, num_latent_gps]
 
     q_sqrt = Parameter(
-        np.stack([np.eye(NUM_INDUCING) for _ in range(1)]),
+        np.stack([1e-1 * np.eye(NUM_INDUCING) for _ in range(1)]),
         transform=triangular(),
         name="q_sqrt_wass",
     )  # [num_latent_gps, num_inducing, num_inducing]
 
-    f2_mean, f2_var = base_conditional(Kuf_wass, Kuu_wass, Kff_wass, q_mu, q_sqrt)
-    f2_mean_v2, f2_var_v2 = conditional_GP(q_mu, q_sqrt, Kff_wass, Kuf_wass, Kuu_wass, white=True, full_cov=False)
+    f2_mean, f2_var = base_conditional(Kuf_wass, Kuu_wass, Kff_wass, q_mu, full_cov = False, q_sqrt = q_sqrt, white = True)
+    f2_mean_v2, f2_var_v2 = conditional_GP(q_mu, q_sqrt, Kff_wass, Kuf_wass, Kuu_wass, True, False)
 
     tf.debugging.assert_equal(f2_mean, f2_mean_v2, message = "problem with f2_mean")
     tf.debugging.assert_equal(f2_var, f2_var_v2, message = "problem with f2_var")
-
 
     print('f2_mean -- ', f2_mean)
     print('f2_var -- ', f2_var)

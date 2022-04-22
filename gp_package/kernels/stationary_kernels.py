@@ -158,6 +158,13 @@ class Hybrid(IsotropicStationary):
 
         return self.K_r2(r2, w2)
 
+    # Overides default K_diag from Stationary base class 
+    def K_diag(self, X: tfp.distributions.MultivariateNormalDiag) -> tf.Tensor:
+
+        X_sampled = X.sample()
+        return tf.fill(tf.shape(X_sampled)[:-1], tf.squeeze(self.variance))
+
+
     def K_r2(self, r2: TensorType, w2: TensorType) -> tf.Tensor:
         
         # r2 -- is the squared euclidean distance
