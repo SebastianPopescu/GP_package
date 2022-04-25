@@ -179,6 +179,7 @@ class Kernel(Module, metaclass=abc.ABCMeta):
         *,
         full_cov: bool = True,
         presliced: bool = False,
+        seed : int = None
     ) -> tf.Tensor:
         if (not full_cov) and (X2 is not None):
             raise ValueError("Ambiguous inputs: `not full_cov` and `X2` are not compatible.")
@@ -191,7 +192,10 @@ class Kernel(Module, metaclass=abc.ABCMeta):
             return self.K_diag(X)
 
         else:
-            return self.K(X, X2)
+            if isinstance(X, tfp.distributions.MultivariateNormalDiag):
+                return self.K(X,X2, seed = seed)
+            else:
+                return self.K(X, X2)
 
     def __add__(self, other: "Kernel") -> "Kernel":
         return Sum([self, other])

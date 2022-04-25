@@ -20,6 +20,7 @@ from ..inducing_variables import (
 )
 from ..kernels import *
 from ..mean_functions import MeanFunction
+import numpy as np
 
 class AbstractPosterior(Module, ABC):
     def __init__(
@@ -179,8 +180,11 @@ class IndependentPosteriorMultiOutput(IndependentPosterior):
             Knn = self.kernel.kernel(Xnew, full_cov=full_cov)
             # we don't call self.kernel() directly as that would do unnecessary tiling
 
-            Kmm = Kuus(self.X_data, self.kernel, jitter=default_jitter())  # [M, M]
-            Kmn = Kufs(self.X_data, self.kernel, Xnew)  # [M, N]
+            lcl_seed = np.random.randint(1e5)
+            tf.random.set_seed(lcl_seed)
+
+            Kmm = Kuus(self.X_data, self.kernel, jitter=default_jitter(), seed = lcl_seed)  # [M, M]
+            Kmn = Kufs(self.X_data, self.kernel, Xnew, seed  = lcl_seed)  # [M, N]
             
             fmean, fvar = base_conditional(
                 Kmn, Kmm, Knn, self.q_mu, full_cov=full_cov, q_sqrt=self.q_sqrt, white=self.whiten

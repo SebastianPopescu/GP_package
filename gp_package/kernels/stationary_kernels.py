@@ -145,16 +145,27 @@ class Hybrid(IsotropicStationary):
     """
 
     # Overides default K from IsotropicStationary base class
-    def K(self, X: tfp.distributions.MultivariateNormalDiag, X2: Optional[tfp.distributions.MultivariateNormalDiag] = None) -> tf.Tensor:
-        
-        X_sampled = X.sample()
+    def K(self, X: tfp.distributions.MultivariateNormalDiag, X2: Optional[tfp.distributions.MultivariateNormalDiag] = None, *, 
+        seed : Optional[Any] = None) -> tf.Tensor:
+
+        print('---- inside K -----')
+        print('X :', X)
+        print('X2 :', X2)
+
+        w2 = self.scaled_squared_Wasserstein_2_dist(X, X2)
+
+        tf.random.set_seed(seed)
+        X_sampled = X.sample(seed = seed)
+        print('inside K we have X_sampled:', X_sampled)
         if X2 is not None:
             assert isinstance(X2, tfp.distributions.MultivariateNormalDiag)
             X2_sampled = X2.sample()
+            print('inside K we have X2_sampled:', X2_sampled)
         else:
             X2_sampled = None
+
         r2 = self.scaled_squared_euclid_dist(X_sampled, X2_sampled)
-        w2 = self.scaled_squared_Wasserstein_2_dist(X, X2)
+
 
         return self.K_r2(r2, w2)
 

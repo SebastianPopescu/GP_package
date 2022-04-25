@@ -2,7 +2,7 @@ from numpy import isin
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from typing import Union
+from typing import Any, Optional, Union
 
 from gp_package.inducing_variables.distributional_inducing_variables import DistributionalInducingPoints
 
@@ -10,9 +10,11 @@ from ..base import TensorLike, TensorType
 from ..inducing_variables import InducingPoints
 from ..kernels import Kernel, SquaredExponential
 
+
 def Kuf(
     inducing_variable: Union[InducingPoints,DistributionalInducingPoints], kernel: Kernel, 
-    Xnew: Union[TensorType,tfp.distributions.MultivariateNormalDiag]) -> tf.Tensor:
+    Xnew: Union[TensorType,tfp.distributions.MultivariateNormalDiag],
+    seed : Optional[Any] = None) -> tf.Tensor:
     
     if isinstance(inducing_variable,DistributionalInducingPoints):
         # Create instance of tfp.distributions.MultivariateNormalDiag so that it works with underpinning methods from kernel
@@ -22,9 +24,10 @@ def Kuf(
         distributional_inducing_points = tfp.distributions.MultivariateNormalDiag(loc = inducing_variable.Z_mean,
             scale_diag = tf.sqrt(inducing_variable.Z_var))
         
-        return kernel(distributional_inducing_points, Xnew)
+        return kernel(distributional_inducing_points, Xnew, seed = seed)
     
     elif isinstance(inducing_variable, InducingPoints):    
         
         return kernel(inducing_variable.Z, Xnew)
+
 

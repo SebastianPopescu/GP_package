@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from typing import Union
+from typing import Any, Union, Optional
 
 from gp_package.covariances.kuu import Kuu
 
@@ -20,9 +20,10 @@ def Kuus(
     kernel: SharedIndependent,
     *,
     jitter: float = 0.0,
+    seed : Optional[Any] = None
 ) -> tf.Tensor:
     
-    Kmm = Kuu(inducing_variable.inducing_variable, kernel.kernel)  # [M, M]
+    Kmm = Kuu(inducing_variable.inducing_variable, kernel.kernel, seed = seed)  # [M, M]
     jittermat = tf.eye(inducing_variable.num_inducing, dtype=Kmm.dtype) * jitter
     return Kmm + jittermat
 

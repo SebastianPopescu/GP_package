@@ -8,7 +8,7 @@ import tensorflow_probability as tfp
 from sklearn.neighbors import KernelDensity
 tf.keras.backend.set_floatx("float64")
 import os
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional, Tuple, Any
 from gp_package.kernels import SquaredExponential, Kernel
 from gp_package.inducing_variables import InducingPoints, DistributionalInducingPoints
 from typing import Union
@@ -94,6 +94,7 @@ def base_conditional_with_lm(
         cov_shape = tf.concat([leading_dims, [num_func, N]], 0)  # [..., R, N]
         fvar = tf.broadcast_to(tf.expand_dims(fvar, -2), cov_shape)  # [..., R, N]
 
+    print('GPflow-esque fvar_distributional', fvar)
     # another backsubstitution in the unwhitened case
     if not white:
         A = tf.linalg.triangular_solve(tf.linalg.adjoint(Lm), A, lower=False)
@@ -122,6 +123,7 @@ def base_conditional_with_lm(
             fvar = fvar + tf.linalg.matmul(LTA, LTA, transpose_a=True)  # [R, N, N]
         else:
             fvar = fvar + tf.reduce_sum(tf.square(LTA), -2)  # [R, N]
+            print('GPflow-esque fvar_epistemic', tf.reduce_sum(tf.square(LTA), -2))
 
     if not full_cov:
         fvar = tf.linalg.adjoint(fvar)  # [N, R]
@@ -141,7 +143,6 @@ def conditional_GP(q_mu, q_sqrt, Knn, Kmn, Kmm,
     white=True, full_cov=False):
 
     """
-    This only works for whitened case
     TODO -- document this function
     """
     print(' ******* conditional GP ****************')
@@ -153,7 +154,7 @@ def conditional_GP(q_mu, q_sqrt, Knn, Kmn, Kmm,
         fvar_distributional = Knn - tf.matmul(A, A, transpose_a=True)
     else:
         fvar_distributional = Knn[:,tf.newaxis] - tf.transpose(tf.reduce_sum(tf.square(A), 0, keepdims=True))
-        print('fvar_distributional ', fvar_distributional)
+        #print('fvar_distributional ', fvar_distributional)
     
     # another backsubstitution in the unwhitened case
     if not white:
@@ -168,45 +169,14 @@ def conditional_GP(q_mu, q_sqrt, Knn, Kmn, Kmm,
         A = tf.tile(tf.expand_dims(A, axis=0),[ 1,1,1])
         LTA= tf.matmul(q_sqrt,A, transpose_a = True)
         fvar_epistemic = tf.transpose(tf.reduce_sum(tf.square(LTA), 1, keepdims=False))
-        print("fvar_epistemic", fvar_epistemic)
+        #print("fvar_epistemic", fvar_epistemic)
 
     fvar = fvar_epistemic + fvar_distributional
 
     return fmean, fvar
 
 
-def Kuu(
-    inducing_variable: Union[InducingPoints, DistributionalInducingPoints], kernel: Kernel, *, jitter: float = 0.0
-) -> tf.Tensor:
 
-    if isinstance(inducing_variable, DistributionalInducingPoints):
-        # Create instance of tfp.distributions.MultivariateNormalDiag so that it works with underpinning methods from kernel
-        distributional_inducing_points = tfp.distributions.MultivariateNormalDiag(loc = inducing_variable.Z_mean,
-            scale_diag = tf.sqrt(inducing_variable.Z_var))
-        Kzz = kernel(distributional_inducing_points)
-    elif isinstance(inducing_variable, InducingPoints):
-        Kzz = kernel(inducing_variable.Z)
-    Kzz += jitter * tf.eye(inducing_variable.num_inducing, dtype=Kzz.dtype)
-    return Kzz
-
-
-def Kuf(
-    inducing_variable: Union[InducingPoints,DistributionalInducingPoints], kernel: Kernel, 
-    Xnew: Union[TensorType,tfp.distributions.MultivariateNormalDiag]) -> tf.Tensor:
-    
-    if isinstance(inducing_variable,DistributionalInducingPoints):
-        # Create instance of tfp.distributions.MultivariateNormalDiag so that it works with underpinning methods from kernel
-
-        assert isinstance(Xnew, tfp.distributions.MultivariateNormalDiag)
-
-        distributional_inducing_points = tfp.distributions.MultivariateNormalDiag(loc = inducing_variable.Z_mean,
-            scale_diag = tf.sqrt(inducing_variable.Z_var))
-        
-        return kernel(distributional_inducing_points, Xnew)
-    
-    elif isinstance(inducing_variable, InducingPoints):    
-        
-        return kernel(inducing_variable.Z, Xnew)
 
 
 class ToyData1D(object):
@@ -255,6 +225,44 @@ def load_snelson_data(n=100, dtype=np.float64):
     return ToyData1D(train_x, train_y, test_x=test_x)
 
 
+def Kuu(
+    inducing_variable: Union[InducingPoints, DistributionalInducingPoints], kernel: Kernel, *, jitter: float = 0.0,
+    seed : Optional[Any]  = None,
+) -> tf.Tensor:
+
+    if isinstance(inducing_variable, DistributionalInducingPoints):
+        # Create instance of tfp.distributions.MultivariateNormalDiag so that it works with underpinning methods from kernel
+        distributional_inducing_points = tfp.distributions.MultivariateNormalDiag(loc = inducing_variable.Z_mean,
+            scale_diag = tf.sqrt(inducing_variable.Z_var))
+        Kzz = kernel(distributional_inducing_points, seed = seed)
+    elif isinstance(inducing_variable, InducingPoints):
+        Kzz = kernel(inducing_variable.Z)
+    Kzz += jitter * tf.eye(inducing_variable.num_inducing, dtype=Kzz.dtype)
+    return Kzz
+
+
+def Kuf(
+    inducing_variable: Union[InducingPoints,DistributionalInducingPoints], kernel: Kernel, 
+    Xnew: Union[TensorType,tfp.distributions.MultivariateNormalDiag],
+    seed : Optional[Any] = None) -> tf.Tensor:
+    
+    if isinstance(inducing_variable,DistributionalInducingPoints):
+        # Create instance of tfp.distributions.MultivariateNormalDiag so that it works with underpinning methods from kernel
+
+        assert isinstance(Xnew, tfp.distributions.MultivariateNormalDiag)
+
+        distributional_inducing_points = tfp.distributions.MultivariateNormalDiag(loc = inducing_variable.Z_mean,
+            scale_diag = tf.sqrt(inducing_variable.Z_var))
+        
+        return kernel(distributional_inducing_points, Xnew, seed = seed)
+    
+    elif isinstance(inducing_variable, InducingPoints):    
+        
+        return kernel(inducing_variable.Z, Xnew)
+
+
+
+
 if __name__=="__main__":
 
     toy = load_snelson_data(n=100)
@@ -263,17 +271,22 @@ if __name__=="__main__":
 
     num_data, d_xim = X.shape
 
-    NUM_INDUCING = 20
+    NUM_INDUCING = 10
 
     kernel_euclidean = SquaredExponential()
     inducing_variable_euclidean = InducingPoints(
         np.linspace(X.min(), X.max(), NUM_INDUCING).reshape(-1, 1))
 
-    Kuu_euclidean = Kuu(inducing_variable_euclidean, kernel_euclidean)
+    print('-----------------------------------------')
+    print('---------- Layer 1 info -----------------')
+    print('-----------------------------------------')
+
+
+    Kuu_euclidean = Kuu(inducing_variable_euclidean, kernel_euclidean, jitter = 1e-6)
     print("Kuu euclidean -- ", Kuu_euclidean)
-    Kuf_euclidean = Kuf(inducing_variable_euclidean, kernel_euclidean, X[:10,...])
+    Kuf_euclidean = Kuf(inducing_variable_euclidean, kernel_euclidean, X[:5,...])
     print("Kuf euclidean -- ", Kuf_euclidean)
-    Kff_euclidean = kernel_euclidean(X[:10,...], full_cov=False)
+    Kff_euclidean = kernel_euclidean(X[:5,...], full_cov=False)
     print("Kff euclidean -- ", Kff_euclidean)
 
     ###### Introduce variational parameters for q(U) #######
@@ -301,6 +314,12 @@ if __name__=="__main__":
     tf.debugging.assert_equal(f1_mean, f1_mean_v2, message = "problem with f1_mean")
     tf.debugging.assert_equal(f1_var, f1_var_v2, message = "problem with f1_var")
 
+    print('-----------------------------------------')
+    print('---------- Layer 2 info -----------------')
+    print('-----------------------------------------')
+
+
+    lcl_seed = np.random.randint(1e5)
     kernel_hyrbid = Hybrid()
     z_init_mean = np.random.uniform(low=-0.5, high=0.5, size=(NUM_INDUCING, 1))
     z_init_var = 0.0067153485 * np.ones((NUM_INDUCING, 1))
@@ -308,12 +327,12 @@ if __name__=="__main__":
 
     F1_dist = tfp.distributions.MultivariateNormalDiag(loc = f1_mean, scale_diag = tf.sqrt(f1_var))
 
-    Kuu_wass = Kuu(inducing_variable_distributional, kernel_hyrbid)
-    #print("Kuu wass -- ", Kuu_wass)
-    Kuf_wass = Kuf(inducing_variable_distributional, kernel_hyrbid, F1_dist)
-    #print("Kuf wass -- ", Kuf_wass)
+    Kuu_wass = Kuu(inducing_variable_distributional, kernel_hyrbid, jitter = 1e-6, seed = lcl_seed)
+    print("Kuu hybrid -- ", Kuu_wass)
+    Kuf_wass = Kuf(inducing_variable_distributional, kernel_hyrbid, F1_dist, seed = lcl_seed)
+    print("Kuf hybrid -- ", Kuf_wass)
     Kff_wass = kernel_hyrbid(F1_dist, full_cov=False)
-    #print("Kff wass -- ", Kff_wass)
+    print("Kff hybrid -- ", Kff_wass)
 
     ###### Introduce variational parameters for q(U) #######
     q_mu = Parameter(
