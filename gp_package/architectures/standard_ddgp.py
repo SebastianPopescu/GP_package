@@ -109,7 +109,7 @@ def _construct_hybrid_kernel(input_dim: int, is_last_layer: bool) -> Hybrid:
     return Hybrid(lengthscales=lengthscales, variance=variance)
 
 
-def build_constant_input_dim_dist_deep_gp(X: np.ndarray, num_layers: int, config: Config) -> DistDeepGP:
+def build_constant_input_dim_dist_deep_gp(X: np.ndarray, num_layers: int, config: Config, dim_output : int) -> DistDeepGP:
     r"""
     Build a Distributional Deep GP consisting of ``num_layers`` :class:`GPLayer`\ s.
     All the hidden layers have the same input dimension as the data, that is, ``X.shape[1]``.
@@ -146,7 +146,7 @@ def build_constant_input_dim_dist_deep_gp(X: np.ndarray, num_layers: int, config
     ### First layer is standard Euclidean-space SVGP ###
     is_last_layer = i_layer == num_layers - 1
     D_in = input_dim
-    D_out = 1 if is_last_layer else input_dim
+    D_out = dim_output if is_last_layer else input_dim
 
     # Pass in kernels, specify output dim (shared hyperparams/variables)
 
@@ -192,7 +192,7 @@ def build_constant_input_dim_dist_deep_gp(X: np.ndarray, num_layers: int, config
     for i_layer in range(1, num_layers):
         is_last_layer = i_layer == num_layers - 1
         D_in = input_dim
-        D_out = 1 if is_last_layer else input_dim
+        D_out = dim_output if is_last_layer else input_dim
 
         # Pass in kernels, specify output dim (shared hyperparams/variables)
 

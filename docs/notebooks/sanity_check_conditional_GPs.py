@@ -176,9 +176,6 @@ def conditional_GP(q_mu, q_sqrt, Knn, Kmn, Kmm,
     return fmean, fvar
 
 
-
-
-
 class ToyData1D(object):
     def __init__(self, train_x, train_y, test_x, normalize=False, 
                  dtype=np.float64):
@@ -240,7 +237,6 @@ def Kuu(
     Kzz += jitter * tf.eye(inducing_variable.num_inducing, dtype=Kzz.dtype)
     return Kzz
 
-
 def Kuf(
     inducing_variable: Union[InducingPoints,DistributionalInducingPoints], kernel: Kernel, 
     Xnew: Union[TensorType,tfp.distributions.MultivariateNormalDiag],
@@ -259,8 +255,6 @@ def Kuf(
     elif isinstance(inducing_variable, InducingPoints):    
         
         return kernel(inducing_variable.Z, Xnew)
-
-
 
 
 if __name__=="__main__":
