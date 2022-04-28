@@ -2,9 +2,40 @@ from typing import Callable, Optional, Tuple
 
 import tensorflow as tf
 
+from gp_package.inverse_approximations.inverse_approximation import InverseApproximation
+
 from ..base import MeanAndVariance
 from ..config import default_float, default_jitter
 from ..utils.ops import leading_transpose
+
+
+# TODO -- check if this is correct -- compare to SebO's implementation
+def sample_chi_squared(df,m):
+
+    normal_matrix = tf.random.normal(shape=(tf.cast(df,tf.int32),tf.cast(df,tf.int32)))
+    sq_normal_matrix = tf.square(normal_matrix)
+
+    upper_sq_normal_matrix = tf.linalg.band_part(sq_normal_matrix, 0, -1) 
+    ### select top m rows
+    sliced_upper_sq_normal_matrix = tf.slice(upper_sq_normal_matrix,[0,0],[m,-1])
+
+    return tf.reduce_sum(sliced_upper_sq_normal_matrix, axis=-1)
+
+# TODO -- check if this is correct -- compare to SebO's implementation
+def sample_Wishart(posterior_cholesky, df_q, num_inducing):
+
+    A = tf.random.normal(shape = (num_inducing, num_inducing), dtype = posterior_cholesky.dtype)
+
+    sampled_chi_squared_diagonal_terms = sample_chi_squared(df = df_q, m = num_inducing)
+    sampled_chi_squared_diagonal_terms = tf.sqrt(sampled_chi_squared_diagonal_terms)
+    A = tf.linalg.set_diag(A, tf.reshape(sampled_chi_squared_diagonal_terms,[-1, ]))
+
+    L_K_A = tf.matmul(posterior_cholesky, A)
+    sampled_Kmm_inverse = tf.matmul(L_K_A, L_K_A, transpose_b = True) 
+
+    return sampled_Kmm_inverse, L_K_A
+
+
 
 def base_conditional(
     Kmn: tf.Tensor,
@@ -153,6 +184,212 @@ def base_conditional_with_lm(
     tf.debugging.assert_shapes(shape_constraints, message="base_conditional() return values")
 
     return fmean, fvar
+
+
+# TODO -- this needs to be implemented
+def inverse_free_base_conditional(
+    Kmn: tf.Tensor,
+    Kmm: tf.Tensor,
+    Knn: tf.Tensor,
+    T : tf.Tensor,
+    inverse_approximation : InverseApproximation,
+    f: tf.Tensor,
+    *,
+    full_cov: bool = False,
+    q_sqrt: Optional[tf.Tensor] = None,
+    white: bool = False,
+) -> MeanAndVariance:
+    r"""
+    # TODO -- update documentation for this function 
+    Given a g1 and g2, and distribution p and q such that
+      p(g2) = N(g2; 0, Kmm)
+
+      p(g1) = N(g1; 0, Knn)
+      p(g1 | g2) = N(g1; Knm (Kmm⁻¹) g2, Knn - Knm (Kmm⁻¹) Kmn)
+
+    And
+      q(g2) = N(g2; f, q_sqrt q_sqrtᵀ)
+
+    This method computes the mean and (co)variance of
+      q(g1) = ∫ q(g2) p(g1 | g2)
+
+    :param Kmn: [M, ..., N]
+    :param Kmm: [M, M]
+    :param Knn: [..., N, N]  or  N
+    :param f: [M, R]
+    :param full_cov: bool
+    :param q_sqrt: If this is a Tensor, it must have shape [R, M, M] (lower
+        triangular) or [M, R] (diagonal)
+    :param white: bool
+    :return: [N, R]  or [R, N, N]
+    """
+    Lm = tf.linalg.cholesky(Kmm)
+    return inverse_free_base_conditional_with_lm(
+        Kmn=Kmn, Lm=Lm, Knn=Knn, f=f, full_cov=full_cov, q_sqrt=q_sqrt, white=white
+    )
+
+
+# TODO -- this needs to be implemented
+def inverse_free_base_conditional_with_lm(
+    Kmn: tf.Tensor,
+    Lm: tf.Tensor,
+    Knn: tf.Tensor,
+    inverse_approximation : InverseApproximation,
+    T : tf.Tensor,
+    L_T : tf.Tensor,
+    f: tf.Tensor,
+    *,
+    full_cov: bool = False,
+    q_sqrt: Optional[tf.Tensor] = None,
+    white: bool = False,
+) -> MeanAndVariance:
+    r"""
+    Has the same functionality as the `base_conditional` function, except that instead of
+    `Kmm` this function accepts `Lm`, which is the Cholesky decomposition of `Kmm`.
+
+    This allows `Lm` to be precomputed, which can improve performance.
+    """
+    # compute kernel stuff
+    num_func = tf.shape(f)[-1]  # R
+    N = tf.shape(Kmn)[-1]
+    M = tf.shape(f)[-2]
+
+    # get the leading dims in Kmn to the front of the tensor
+    # if Kmn has rank two, i.e. [M, N], this is the identity op.
+    K = tf.rank(Kmn)
+    perm = tf.concat(
+        [
+            tf.reshape(tf.range(1, K - 1), [K - 2]),  # leading dims (...)
+            tf.reshape(0, [1]),  # [M]
+            tf.reshape(K - 1, [1]),
+        ],
+        0,
+    )  # [N]
+    Kmn = tf.transpose(Kmn, perm)  # [..., M, N]
+
+    
+    ### sample from Inverse-Wishart q(T) ###
+
+    """
+    # TODO -- this should be implemented in TLayer call function ()
+
+    Kmm_inverse, L_Kmm_inverse = sample_Wishart(
+        posterior_cholesky = posterior_cholesky_Kmm_inv / tf.sqrt(df_f_wishart), 
+        df_q = df_f_wishart, 
+        num_inducing = self.num_inducing[l-1])
+    
+    """
+    ### TODO -- check if L_T_inv is still required 
+    L_T_inv = inverse_approximation.get_cholesky_inverse()
+        
+    shape_constraints = [
+        (Kmn, [..., "M", "N"]),
+        (Lm, ["M", "M"]),
+        (Knn, [..., "N", "N"] if full_cov else [..., "N"]),
+        (f, ["M", "R"]),
+        (T, ["M", "M"]),
+        (L_T, ["M", "M"]),
+        (L_T_inv, ["M", "M"])
+    ]
+    if q_sqrt is not None:
+        shape_constraints.append(
+            (q_sqrt, (["M", "R"] if q_sqrt.shape.ndims == 2 else ["R", "M", "M"]))
+        )
+    tf.debugging.assert_shapes(
+        shape_constraints,
+        message="base_conditional() arguments "
+        "[Note that this check verifies the shape of an alternative "
+        "representation of Kmn. See the docs for the actual expected "
+        "shape.]",
+    )
+
+    leading_dims = tf.shape(Kmn)[:-2]
+
+    """
+    # TODO -- this should be implemented as a Layer 
+
+    T_Kuf = tf.linalg.matmul(T, Kuf)
+    Kuu_T_Kuf = tf.linalg.matmul(Kuu, T_Kuf)
+    Schur_upper_bound = Kff + tf.linalg.matmul(T_Kuf, Kuu_T_Kuf, transpose_a = True)
+    Schur_upper_bound += -  2. * tf.linalg.matmul(Kuf, T_Kuf, transpose_a=True)
+
+    df_inv_gamma = 0.5 * (df_f_inv_wishart +  1.)
+    diagonal_posterior_Schur = 0.5 * df_f_inv_wishart * tf.linalg.diag_part(Schur_upper_bound) 
+    df_inv_gamma = tf.ones_like(diagonal_posterior_Schur) * df_inv_gamma 
+    #inverse_gamma_object = tf.contrib.distributions.InverseGamma(
+
+    inverse_gamma_object = tfp.distributions.InverseGamma(
+        concentration = df_inv_gamma, scale = diagonal_posterior_Schur, 
+        name='InverseGamma')                    
+    
+    sampled_Schur = inverse_gamma_object.sample() #### (num_batch,)
+    sampled_Schur = tf.reshape(sampled_Schur, [-1,1]) ### -- shape (num_batch, 1)
+    """
+
+
+
+    # Compute the projection matrix A
+    Lm = tf.broadcast_to(Lm, tf.concat([leading_dims, tf.shape(Lm)], 0))  # [..., M, M]
+    A = tf.linalg.triangular_solve(Lm, Kmn, lower=True)  # [..., M, N]
+
+    # compute the covariance due to the conditioning
+    if full_cov:
+        fvar = Knn - tf.linalg.matmul(A, A, transpose_a=True)  # [..., N, N]
+        cov_shape = tf.concat([leading_dims, [num_func, N, N]], 0)
+        fvar = tf.broadcast_to(tf.expand_dims(fvar, -3), cov_shape)  # [..., R, N, N]
+    else:
+        fvar = Knn - tf.reduce_sum(tf.square(A), -2)  # [..., N]
+        cov_shape = tf.concat([leading_dims, [num_func, N]], 0)  # [..., R, N]
+        fvar = tf.broadcast_to(tf.expand_dims(fvar, -2), cov_shape)  # [..., R, N]
+
+    # another backsubstitution in the unwhitened case
+    if not white:
+        A = tf.linalg.triangular_solve(tf.linalg.adjoint(Lm), A, lower=False)
+
+    # construct the conditional mean
+    f_shape = tf.concat([leading_dims, [M, num_func]], 0)  # [..., M, R]
+    f = tf.broadcast_to(f, f_shape)  # [..., M, R]
+    fmean = tf.linalg.matmul(A, f, transpose_a=True)  # [..., N, R]
+
+    if q_sqrt is not None:
+        q_sqrt_dims = q_sqrt.shape.ndims
+        if q_sqrt_dims == 2:
+            LTA = A * tf.expand_dims(tf.transpose(q_sqrt), 2)  # [R, M, N]
+        elif q_sqrt_dims == 3:
+            L = tf.linalg.band_part(q_sqrt, -1, 0)  # force lower triangle # [R, M, M]
+            L_shape = tf.shape(L)
+            L = tf.broadcast_to(L, tf.concat([leading_dims, L_shape], 0))
+
+            shape = tf.concat([leading_dims, [num_func, M, N]], axis=0)
+            A_tiled = tf.broadcast_to(tf.expand_dims(A, -3), shape)
+            LTA = tf.linalg.matmul(L, A_tiled, transpose_a=True)  # [R, M, N]
+        else:  # pragma: no cover
+            raise ValueError("Bad dimension for q_sqrt: %s" % str(q_sqrt.shape.ndims))
+
+        if full_cov:
+            fvar = fvar + tf.linalg.matmul(LTA, LTA, transpose_a=True)  # [R, N, N]
+        else:
+            fvar = fvar + tf.reduce_sum(tf.square(LTA), -2)  # [R, N]
+
+    if not full_cov:
+        fvar = tf.linalg.adjoint(fvar)  # [N, R]
+
+    shape_constraints = [
+        (Kmn, [..., "M", "N"]),  # tensor included again for N dimension
+        (f, [..., "M", "R"]),  # tensor included again for R dimension
+        (fmean, [..., "N", "R"]),
+        (fvar, [..., "R", "N", "N"] if full_cov else [..., "N", "R"]),
+    ]
+    tf.debugging.assert_shapes(shape_constraints, message="base_conditional() return values")
+
+    return fmean, fvar
+
+
+
+
+
+
+
 
 def sample_mvn(
     mean: tf.Tensor, cov: tf.Tensor, full_cov: bool, num_samples: Optional[int] = None

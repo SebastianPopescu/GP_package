@@ -164,10 +164,9 @@ class IndependentPosteriorMultiOutput(IndependentPosterior):
             # we don't call self.kernel() directly as that would do unnecessary tiling
 
             Kmm = Kuus(self.X_data, self.kernel, jitter=default_jitter())  # [M, M]
-            print('--- inside IndependentPosteriorMultiOutput ---')
-            print(Xnew)
             Kmn = Kufs(self.X_data, self.kernel, Xnew)  # [M, N]
-
+            
+            # TODO -- update with inverse_free_base_conditional function
             fmean, fvar = base_conditional(
                 Kmn, Kmm, Knn, self.q_mu, full_cov=full_cov, q_sqrt=self.q_sqrt, white=self.whiten
             )  # [N, P],  [P, N, N] or [N, P]

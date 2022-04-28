@@ -28,9 +28,11 @@ from gp_package import inducing_variables
 #from gpflux.runtime_checks import verify_compatibility
 #from gpflux.sampling.sample import Sample, efficient_sample
 
-class TLayer(tfp.layers.DistributionLambda):
+class Schur_upper_bound_Layer(tfp.layers.DistributionLambda):
     """
-    A T Layer. Useful for sampling from it and adding   
+    A Schur upper bound Layer. Useful for sampling from it and adding
+
+    # TODO -- update documentation for this function   
     """
 
     def __init__(
@@ -40,6 +42,7 @@ class TLayer(tfp.layers.DistributionLambda):
         kernel : Kernel,
         *,
         num_samples: Optional[int] = None,
+        full_cov: bool = False,
         name: Optional[str] = None,
         verbose: bool = True,
     ):
@@ -54,6 +57,7 @@ class TLayer(tfp.layers.DistributionLambda):
             :class:`tfp.distributions.Distribution`'s `sample()
             <https://www.tensorflow.org/probability/api_docs/python/tfp/distributions/Distribution#sample>`_
             method).
+        :param full_cov: only works with full_cov = False at the moment since we are missing tfp.distributions.InverseWishart
         :param name: The name of this layer.
         :param verbose: The verbosity mode. Set this parameter to `True`
             to show debug information.
@@ -81,46 +85,36 @@ class TLayer(tfp.layers.DistributionLambda):
         (see :meth:`_make_distribution_fn`).
         You can pass this distribution to `tf.convert_to_tensor`, which will return
         samples from the distribution (see :meth:`_convert_to_tensor_fn`).
-
-        This method also adds a layer-specific loss function, given by the KL divergence between
-        this layer and the GP prior (scaled to per-datapoint).
         """
         outputs = super().call(*args, **kwargs)
 
-        if kwargs.get("training"):
-            #log_prior = tf.add_n([p.log_prior_density() for p in self.kernel.trainable_parameters])
-            loss = self.standard_kl() 
-
-        else:
-            # TF quirk: add_loss must always add a tensor to compile
-            loss = tf.constant(0.0, dtype=default_float())
-        self.add_loss(loss)
-
-        # Metric names should be unique; otherwise they get overwritten if you
-        # have multiple with the same name
-        name = f"{self.name}_standard_kl_Wishart" if self.name else "standard_kl_Wishart"
-        self.add_metric(loss, name=name, aggregation="mean")
-
         return outputs
 
-    def standard_kl(self, g : TensorData, kernel : Kernel) -> tf.Tensor:
-        r"""
-        Returns the KL divergence ``KL[q(T)∥p(T)]`` from the prior ``p(T)`` to
-        the variational distribution ``q(T)``.  
+    def get_Schur_upper_bound(self,
+        T : tf.Tensor,
+        Kuf : tf.Tensor,
+        Kuu : tf.Tensor,
+        Kff : tf.Tensor
+        ) -> tf.Tensor:
+
         """
-    
-        return standard_kl_T(
-            inverse_approximation = self.inverse_approximation, 
-            df_p = self.inverse_approximation.dof, 
-            inducing_variable = self.inducing_variable,
-            kernel = kernel, 
-            g  = g 
-        )
+        TODO -- add documentation about this function
+        """
+
+        T_Kuf = tf.linalg.matmul(T, Kuf)
+        Kuu_T_Kuf = tf.linalg.matmul(Kuu, T_Kuf)
+        Schur_upper_bound = Kff + tf.linalg.matmul(T_Kuf, Kuu_T_Kuf, transpose_a = True)
+        Schur_upper_bound += -  2. * tf.linalg.matmul(Kuf, T_Kuf, transpose_a=True)
+
+        return Schur_upper_bound
 
 
-
-    def _make_distribution_fn(
-        self, inverse_approximation: InverseApproximation
+    def _make_distribution_fn(self, 
+        inverse_approximation: InverseApproximation,
+        T : tf.Tensor,
+        Kuf : tf.Tensor,
+        Kuu : tf.Tensor,
+        Kff : tf.Tensor
     ) -> tfp.distributions.Distribution:
         """
         Construct the posterior distributions for T
@@ -129,11 +123,25 @@ class TLayer(tfp.layers.DistributionLambda):
         """
 
         # Remainder: df = dof + M + 1 for notational purposes as in paper   
-        df = self.inverse_approximation.dof + self.num_inducing + 1.
+        df = inverse_approximation.dof + self.num_inducing + 1.
 
-        return tfp.distributions.WishartTriL(
-                df=df, scale_tril=self.inverse_approximation.L_T) # df: [1,], scale_tril: [M, M]
+        upper_bound_Schur = self.get_Schur_upper_bound()
 
+        df_inv_gamma = 0.5 * (df +  1.)
+        diagonal_posterior_Schur = 0.5 * df * tf.linalg.diag_part(upper_bound_Schur) 
+        df_inv_gamma = tf.ones_like(diagonal_posterior_Schur) * df_inv_gamma 
+        
+
+        if self.full_cov:
+            # TODO -- need to implement this at one point
+            raise NotImplementedError
+        else:
+
+            return tfp.distributions.InverseGamma(
+                concentration = df_inv_gamma, 
+                scale = diagonal_posterior_Schur, 
+                name='InvGamma-UpperBoundSchur')                    
+        
     def _convert_to_tensor_fn(self, distribution: tfp.distributions.Distribution) -> tf.Tensor:
         """
         Convert the approximate posterior distribution of q(T) (see
@@ -146,9 +154,11 @@ class TLayer(tfp.layers.DistributionLambda):
         if self.num_samples is not None:
             samples = distribution.sample(
                 (self.num_samples,)
-            )  # [S, M, M] 
+            )  # [S,N] 
         else:
-            samples = distribution.sample()  # [M,M] 
+            samples = distribution.sample()  # [N,]
+
+        # TODO -- need to check if we need to add another dimension at the end 
 
         return samples
 

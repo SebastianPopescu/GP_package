@@ -20,6 +20,7 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 from deprecated import deprecated
 from gp_package.config import default_float
+from gp_package.math import compute_A_inv_b
 
 from gp_package.utils.bijectors import triangular
 
@@ -59,10 +60,11 @@ class InverseApproximation(Module):
 
     def get_cholesky_inverse(self):
 
-        # TODO -- get inverse from utils.ops.
-        L_T_inv = 
+        L_T_inv = compute_A_inv_b(self.L_T, tf.eye(self.L_T.get_shape().as_list()[-1]))
 
         return L_T_inv
+
+
 
 
 
