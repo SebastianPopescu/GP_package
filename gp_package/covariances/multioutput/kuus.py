@@ -8,13 +8,6 @@ from ...config import default_float
 from ...inducing_variables import FallbackSharedIndependentInducingVariables, FallbackSharedIndependentDistributionalInducingVariables
 from ...kernels import SharedIndependent
 
-"""
-def _Kuu(inducing_variable, kernel, *, jitter: float = 0.0):
-    Kzz = kernel(inducing_variable.Z)
-    Kzz += jitter * tf.eye(inducing_variable.num_inducing, dtype=Kzz.dtype)
-    return Kzz
-"""
-
 def Kuus(
     inducing_variable: Union[FallbackSharedIndependentInducingVariables,FallbackSharedIndependentDistributionalInducingVariables],
     kernel: SharedIndependent,
@@ -22,6 +15,11 @@ def Kuus(
     jitter: float = 0.0,
     seed : Optional[Any] = None
 ) -> tf.Tensor:
+
+
+    """
+    Warning -- this currently works just with shared variables, hence a single kernel and associated hyperparameters per layer
+    """
     
     Kmm = Kuu(inducing_variable.inducing_variable, kernel.kernel, seed = seed)  # [M, M]
     jittermat = tf.eye(inducing_variable.num_inducing, dtype=Kmm.dtype) * jitter
