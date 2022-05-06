@@ -53,7 +53,7 @@ class InverseApproximation(Module):
                 dof,
                 transform = positive(),
                 dtype=default_float(),
-                name=f"{self.name}_dof" if self.name else "dof"
+                name=f"{self.name}_dof_wishart" if self.name else "dof_wishart"
             )
         self.dof = dof
 

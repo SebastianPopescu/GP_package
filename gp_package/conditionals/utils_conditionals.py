@@ -3,6 +3,7 @@ from typing import Callable, Optional, Tuple
 import tensorflow as tf
 
 from gp_package.inverse_approximations.inverse_approximation import InverseApproximation
+from gp_package.layers.keras_upper_bound_schur import Schur_upper_bound_Layer
 
 from ..base import MeanAndVariance
 from ..config import default_float, default_jitter
@@ -216,6 +217,8 @@ def inverse_free_base_conditional(
     :param Kmn: [M, ..., N]
     :param Kmm: [M, M]
     :param Knn: [..., N, N]  or  N
+    :param T: [M, M]
+    :param inverse_approximation: object that holds L_T
     :param f: [M, R]
     :param full_cov: bool
     :param q_sqrt: If this is a Tensor, it must have shape [R, M, M] (lower
@@ -223,16 +226,19 @@ def inverse_free_base_conditional(
     :param white: bool
     :return: [N, R]  or [R, N, N]
     """
-    Lm = tf.linalg.cholesky(Kmm)
+    #Lm = tf.linalg.cholesky(Kmm)
     return inverse_free_base_conditional_with_lm(
-        Kmn=Kmn, Lm=Lm, Knn=Knn, f=f, full_cov=full_cov, q_sqrt=q_sqrt, white=white
+        Kmm = Kmm, Kmn=Kmn, Knn=Knn, inverse_approximation=inverse_approximation, 
+        T = T,
+        L_T = inverse_approximation.L_T,
+        f=f, full_cov=full_cov, q_sqrt=q_sqrt, white=white
     )
 
 
 # TODO -- this needs to be implemented
 def inverse_free_base_conditional_with_lm(
+    Kmm : tf.Tensor,
     Kmn: tf.Tensor,
-    Lm: tf.Tensor,
     Knn: tf.Tensor,
     inverse_approximation : InverseApproximation,
     T : tf.Tensor,
@@ -305,28 +311,24 @@ def inverse_free_base_conditional_with_lm(
 
     leading_dims = tf.shape(Kmn)[:-2]
 
-    """
-    # TODO -- this should be implemented as a Layer 
+    # TODO -- need to actually initialize this layer 
+    Schur_layer = Schur_upper_bound_Layer()
+    sampled_Schur = Schur_layer(inverse_approximation = inverse_approximation,
+        T = T,
+        Kuf = Kmn,
+        Kuu = Kmm,
+        Kff = Knn)
 
-    T_Kuf = tf.linalg.matmul(T, Kuf)
-    Kuu_T_Kuf = tf.linalg.matmul(Kuu, T_Kuf)
-    Schur_upper_bound = Kff + tf.linalg.matmul(T_Kuf, Kuu_T_Kuf, transpose_a = True)
-    Schur_upper_bound += -  2. * tf.linalg.matmul(Kuf, T_Kuf, transpose_a=True)
+    # TODO -- need to actually initialize this layer
+    Interpolator_layer  = Interpolator_layer()
+    # TODO -- add arguments to the call
+    sampled_T_Kuf =  Interpolator_layer()
 
-    df_inv_gamma = 0.5 * (df_f_inv_wishart +  1.)
-    diagonal_posterior_Schur = 0.5 * df_f_inv_wishart * tf.linalg.diag_part(Schur_upper_bound) 
-    df_inv_gamma = tf.ones_like(diagonal_posterior_Schur) * df_inv_gamma 
-    #inverse_gamma_object = tf.contrib.distributions.InverseGamma(
-
-    inverse_gamma_object = tfp.distributions.InverseGamma(
-        concentration = df_inv_gamma, scale = diagonal_posterior_Schur, 
-        name='InverseGamma')                    
-    
-    sampled_Schur = inverse_gamma_object.sample() #### (num_batch,)
-    sampled_Schur = tf.reshape(sampled_Schur, [-1,1]) ### -- shape (num_batch, 1)
-    """
+    # TODO -- use tf.debugging to see if the samples are okay
 
 
+
+    # TODO -- the following block of code needs to be updated to suit our probabilistic model
 
     # Compute the projection matrix A
     Lm = tf.broadcast_to(Lm, tf.concat([leading_dims, tf.shape(Lm)], 0))  # [..., M, M]
@@ -383,10 +385,6 @@ def inverse_free_base_conditional_with_lm(
     tf.debugging.assert_shapes(shape_constraints, message="base_conditional() return values")
 
     return fmean, fvar
-
-
-
-
 
 
 
