@@ -1,4 +1,4 @@
-from .stationary_kernels import SquaredExponential, Kernel, Stationary, Hybrid
+from .stationary_kernels import SquaredExponential, Kernel, Stationary, Hybrid, Matern32
 from .multioutput import MultioutputKernel, SharedIndependent, SeparateIndependent
 
 __all__ =[
@@ -8,5 +8,6 @@ __all__ =[
     "SharedIndependent", 
     "SeparateIndependent",
     "Stationary",
-    "Hybrid"
+    "Hybrid",
+    "Matern32"
 ]

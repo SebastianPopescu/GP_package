@@ -128,12 +128,66 @@ class SquaredExponential(IsotropicStationary):
         return self.variance * tf.exp(-0.5 * r2)
 
 
+class Matern12(IsotropicStationary):
+    """
+    The Matern 1/2 kernel. Functions drawn from a GP with this kernel are not
+    differentiable anywhere. The kernel equation is
+
+    k(r) = σ² exp{-r}
+
+    where:
+    r  is the Euclidean distance between the input points, scaled by the lengthscales parameter ℓ.
+    σ² is the variance parameter
+    """
+
+    def K_r(self, r: TensorType) -> tf.Tensor:
+        return self.variance * tf.exp(-r)
+
+
+class Matern32(IsotropicStationary):
+    """
+    The Matern 3/2 kernel. Functions drawn from a GP with this kernel are once
+    differentiable. The kernel equation is
+
+    k(r) = σ² (1 + √3r) exp{-√3 r}
+
+    where:
+    r  is the Euclidean distance between the input points, scaled by the lengthscales parameter ℓ,
+    σ² is the variance parameter.
+    """
+
+    def K_r(self, r: TensorType) -> tf.Tensor:
+        sqrt3 = np.sqrt(3.0)
+        return self.variance * (1.0 + sqrt3 * r) * tf.exp(-sqrt3 * r)
+
+
+class Matern52(IsotropicStationary):
+    """
+    The Matern 5/2 kernel. Functions drawn from a GP with this kernel are twice
+    differentiable. The kernel equation is
+
+    k(r) = σ² (1 + √5r + 5/3r²) exp{-√5 r}
+
+    where:
+    r  is the Euclidean distance between the input points, scaled by the lengthscales parameter ℓ,
+    σ² is the variance parameter.
+    """
+
+    def K_r(self, r: TensorType) -> tf.Tensor:
+        sqrt5 = np.sqrt(5.0)
+        return self.variance * (1.0 + sqrt5 * r + 5.0 / 3.0 * tf.square(r)) * tf.exp(-sqrt5 * r)
+
+
+
+
 class Hybrid(IsotropicStationary):
 
     """
     The radial basis function (RBF) or squared exponential kernel multiplied by the Wasserstein-2 distance based kernel. The kernel equation is
 
-        k(r) = σ² exp{-½ r²} W_{2}^{2}\left(\mu_{1}, \mu_{2} \right)
+        k(r) = σ² exp{-½ r²} exp{ -0.5 * W_{2}^{2}\left(\mu_{1}, \mu_{2} \right) }
+
+    should also work with Matern kernels
 
     where:
     r   is the Euclidean distance between the input points, scaled by the lengthscales parameter ℓ.
@@ -143,6 +197,20 @@ class Hybrid(IsotropicStationary):
     TODO -- this remains to be seen as this also implies a discussion around
     Wasserstein Gradient Flows 
     """
+
+
+    def __init__(
+        self, baseline_kernel, **kwargs: Any
+    ) -> None:
+        """
+        :param baseline_kernel: string specifying the underlying kernel to be used withing the Hybrid kernel framework
+        :param kwargs: accepts `name` and `active_dims`, which is a list or
+            slice of indices which controls which columns of X are used (by
+            default, all columns are used).
+        """
+        super().__init__(**kwargs)
+
+        self.baseline_kernel = baseline_kernel
 
     # Overides default K from IsotropicStationary base class
     def K(self, X: tfp.distributions.MultivariateNormalDiag, X2: Optional[tfp.distributions.MultivariateNormalDiag] = None, *, 
@@ -166,8 +234,36 @@ class Hybrid(IsotropicStationary):
 
         r2 = self.scaled_squared_euclid_dist(X_sampled, X2_sampled)
 
+        if self.baseline_kernel == 'squared_exponential':
 
-        return self.K_r2(r2, w2)
+            return self.K_r2(r2, w2)
+
+        elif self.baseline_kernel == 'matern12':
+
+            r = tf.sqrt(tf.maximum(r2, 1e-36))
+            w = tf.sqrt(tf.maximum(w2, 1e-36))
+
+            return self.variance * tf.exp(-r) * tf.exp(-w)
+
+        elif self.baseline_kernel == 'matern32':
+
+
+            r = tf.sqrt(tf.maximum(r2, 1e-36))
+            w = tf.sqrt(tf.maximum(w2, 1e-36))
+
+            sqrt3 = np.sqrt(3.0)
+            return self.variance * (1.0 + sqrt3 * r) * tf.exp(-sqrt3 * r) * (1.0 + sqrt3 * w) * tf.exp(-sqrt3 * w)
+
+
+        elif self.baseline_kernel == 'matern52':
+
+            r = tf.sqrt(tf.maximum(r2, 1e-36))
+            w = tf.sqrt(tf.maximum(w2, 1e-36))
+
+            sqrt5 = np.sqrt(5.0)
+            return self.variance * (1.0 + sqrt5 * r + 5.0 / 3.0 * tf.square(r)) * tf.exp(-sqrt5 * r) * (1.0 + sqrt5 * w + 5.0 / 3.0 * tf.square(w)) * tf.exp(-sqrt5 * w)
+
+
 
     # Overides default K_diag from Stationary base class 
     def K_diag(self, X: tfp.distributions.MultivariateNormalDiag) -> tf.Tensor:

@@ -7,6 +7,7 @@ from tensorflow_probability.python.util.deferred_tensor import TensorMetaClass
 from ..config import default_float
 from ..base import TensorType, Module
 from .base_likelihood_layers import Likelihood
+from .explicit_likelihood_layers import Gaussian, StudentT
 
 class LikelihoodLayer(tf.keras.layers.Layer):
     r"""
@@ -52,25 +53,44 @@ class LikelihoodLayer(tf.keras.layers.Layer):
             correct :class:`~tfp.distributions.Distribution` instead of a tuple
             containing mean and variance only.
         """
-        
-        assert isinstance(inputs, tfp.distributions.MultivariateNormalDiag)
-        F_mean = inputs.loc
-        F_var = inputs.scale.diag ** 2
 
-        if training:
-            assert targets is not None
-            
-            loss_per_datapoint = tf.reduce_mean(
-                -self.likelihood.variational_expectations(F_mean, F_var, targets)
-            )
-            Y_mean = Y_var = None
-        else:
-            loss_per_datapoint = tf.constant(0.0, dtype=default_float())
-            Y_mean, Y_var = self.likelihood.predict_mean_and_var(F_mean, F_var)
+        assert isinstance(inputs, tfp.distributions.MultivariateNormalDiag)
+
+        if isinstance(self.likelihood, Gaussian):
+            F_mean = inputs.loc
+            F_var = inputs.scale.diag ** 2
+
+            if training:
+                assert targets is not None
+                
+                loss_per_datapoint = tf.reduce_mean(
+                    -self.likelihood.variational_expectations(F_mean, F_var, targets)
+                )
+                Y_mean = Y_var = None
+            else:
+                loss_per_datapoint = tf.constant(0.0, dtype=default_float())
+                Y_mean, Y_var = self.likelihood.predict_mean_and_var(F_mean, F_var)
+
+        elif isinstance(self.likelihood, StudentT):
+
+            if training:
+                assert targets is not None
+                
+                loss_per_datapoint = -self.likelihood.log_prob(inputs, targets)
+                Y_mean = Y_var = None
+
+            else:
+                loss_per_datapoint = tf.constant(0.0, dtype=default_float())
+                Y_mean = Y_var = None
+
+            F_mean = inputs.loc
+            F_var = inputs.scale.diag ** 2
 
         self.add_loss(loss_per_datapoint)
 
         return LikelihoodOutputs(F_mean, F_var, Y_mean, Y_var)
+
+
 
 
 class LikelihoodOutputs(tf.Module, metaclass=TensorMetaClass):

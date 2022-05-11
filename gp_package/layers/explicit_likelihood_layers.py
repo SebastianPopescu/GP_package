@@ -59,7 +59,7 @@ from typing import Any, Callable, Iterable, Optional, Sequence, Union
 import tensorflow as tf
 import numpy as np
 
-from .logdensities import gaussian
+from .logdensities import gaussian, student_t
 from ..base import MeanAndVariance, Parameter, TensorType
 from ..utils import positive
 from .base_likelihood_layers import ScalarLikelihood
@@ -124,6 +124,33 @@ class Gaussian(ScalarLikelihood):
             - 0.5 * ((Y - Fmu) ** 2 + Fvar) / self.variance,
             axis=-1,
         )
+
+
+
+
+
+class StudentT(ScalarLikelihood):
+    def __init__(self, scale: float = 1.0, df: float = 3.0, **kwargs: Any) -> None:
+        """
+        :param scale float: scale parameter
+        :param df float: degrees of freedom
+        """
+        super().__init__(**kwargs)
+        self.df = df
+        self.scale = Parameter(scale, transform=positive())
+
+    def _scalar_log_prob(self, F: TensorType, Y: TensorType) -> tf.Tensor:
+        return student_t(Y, F, self.scale, self.df)
+
+    def _conditional_mean(self, F: TensorType) -> tf.Tensor:
+        return F
+
+    def _conditional_variance(self, F: TensorType) -> tf.Tensor:
+        var = (self.scale ** 2) * (self.df / (self.df - 2.0))
+        return tf.fill(tf.shape(F), tf.squeeze(var))
+
+
+
 
 
 
