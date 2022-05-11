@@ -67,44 +67,22 @@ class AbstractPosterior(Module, ABC):
         """
 
 
-class BasePosterior(AbstractPosterior):
+class BaseBayesianPosterior(AbstractPosterior):
     def __init__(
         self,
         kernel: Kernel,
         inducing_variable: InducingVariables,
-        q_mu: tf.Tensor,
-        q_sqrt: tf.Tensor,
         whiten: bool = True,
         mean_function: Optional[MeanFunction] = None,
     ):
 
         super().__init__(kernel, inducing_variable, mean_function=mean_function)
         self.whiten = whiten
-        self.q_mu = q_mu
-        self.q_sqrt = q_sqrt
         #self._set_qdist(q_mu, q_sqrt)
 
-    """
-    @property
-    def q_mu(self) -> tf.Tensor:
-        return self._q_dist.q_mu
-
-    @property
-    def q_sqrt(self) -> tf.Tensor:
-        return self._q_dist.q_sqrt
 
 
-    def _set_qdist(self, q_mu: TensorType, q_sqrt: TensorType) -> tf.Tensor:
-        if q_sqrt is None:
-            self._q_dist = _DeltaDist(q_mu)
-        elif len(q_sqrt.shape) == 2:  # q_diag
-            self._q_dist = _DiagNormal(q_mu, q_sqrt)
-        else:
-            self._q_dist = _MvNormal(q_mu, q_sqrt)
-    """
-
-
-class IndependentPosterior(BasePosterior):
+class IndependentBayesianPosterior(BaseBayesianPosterior):
     
     def _post_process_mean_and_cov(
         self, mean: TensorType, cov: TensorType, full_cov: bool, full_output_cov: bool

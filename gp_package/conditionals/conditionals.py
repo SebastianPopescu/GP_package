@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, List, Optional
 
 import tensorflow as tf
 
@@ -60,3 +60,56 @@ def conditional_GP(
     )
 
     return posterior.fused_predict_f(Xnew, full_cov=full_cov, full_output_cov=full_output_cov)
+
+
+
+def conditional_Bayesian_GP(
+    Xnew: tf.Tensor,
+    inducing_variable: InducingVariables,
+    kernel: Kernel,
+    f: tf.Tensor,
+    theta: List[Any],
+    *,
+    full_cov: bool = False,
+    full_output_cov: bool = False,
+    white: bool = False,
+) -> MeanAndVariance:
+    """
+    Single-output Bayesian GP conditional.
+
+    The covariance matrices used to calculate the conditional have the following shape:
+    - Kuu: [M, M]
+    - Kuf: [M, N]
+    - Kff: [N, N]
+
+    Parameters
+    ----------
+    :param Xnew: data matrix, size [N, D].
+    :param f: sampled U, [M, R]
+    :param theta: list of kernel hyperparameters [kernel_variance, lengthscales]
+    :param full_cov: return the covariance between the datapoints
+    :param full_output_cov: return the covariance between the outputs.
+           NOTE: as we are using a single-output kernel with repetitions
+                 these covariances will be zero.
+    :param q_sqrt: matrix of standard-deviations or Cholesky matrices,
+        size [M, R] or [R, M, M].
+    :param white: boolean of whether to use the whitened representation
+    :return:
+        - mean:     [N, R]
+        - variance: [N, R], [R, N, N], [N, R, R] or [N, R, N, R]
+        Please see `gpflow.conditional._expand_independent_outputs` for more information
+        about the shape of the variance, depending on `full_cov` and `full_output_cov`.
+    """
+        
+    posterior =  IndependentBayesianPosteriorMultiOutput(
+        kernel,
+        inducing_variable,
+        f,
+        theta,
+        whiten=white,
+        mean_function=None,
+    )
+
+    return posterior.fused_predict_f(Xnew, full_cov=full_cov, full_output_cov=full_output_cov)
+
+
