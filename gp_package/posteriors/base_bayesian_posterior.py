@@ -143,20 +143,25 @@ class IndependentPosteriorSingleOutput(IndependentPosterior):
 class IndependentBayesianPosteriorMultiOutput(IndependentBayesianPosterior):
 
     def _conditional_fused(
-        self, Xnew: TensorType, variance: TensorType, lengthscales: TensorType, full_cov: bool = False, full_output_cov: bool = False
+        self, 
+        Xnew: TensorType, 
+        variance: TensorType, 
+        lengthscales: TensorType,
+        f: TensorType, 
+        full_cov: bool = False, full_output_cov: bool = False
     ) -> MeanAndVariance:
         
         if isinstance(self.X_data, SharedIndependentInducingVariables) and isinstance(
             self.kernel, SharedIndependent):
             # same as IndependentPosteriorSingleOutput except for following line
-            Knn = self.kernel.kernel(Xnew, full_cov=full_cov)
+            Knn = self.kernel.kernel(variance, Xnew, full_cov=full_cov)
             # we don't call self.kernel() directly as that would do unnecessary tiling
 
-            Kmm = Kuus(self.X_data, self.kernel, jitter=default_jitter())  # [M, M]
-            Kmn = Kufs(self.X_data, self.kernel, Xnew)  # [M, N]
+            Kmm = BayesianKuus(self.X_data, self.kernel, variance, lengthscales, jitter=default_jitter())  # [M, M]
+            Kmn = BayesianKufs(self.X_data, self.kernel, Xnew, variance, lengthscales)  # [M, N]
 
-            fmean, fvar = base_conditional(
-                Kmn, Kmm, Knn, self.q_mu, full_cov=full_cov, q_sqrt=self.q_sqrt, white=self.whiten
+            fmean, fvar = base_bayesian_conditional(
+                Kmn, Kmm, Knn, f, full_cov=full_cov, white=self.whiten
             )  # [N, P],  [P, N, N] or [N, P]
         else:
             raise NotImplementedError

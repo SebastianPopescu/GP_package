@@ -8,7 +8,7 @@ from ...kernels import SharedIndependent
 from gp_package.covariances.bayesian_kuu import BayesianKuu
 
 
-def Kuus(
+def BayesianKuus(
     inducing_variable: FallbackSharedIndependentInducingVariables,
     kernel: SharedIndependent,
     variance: TensorType,

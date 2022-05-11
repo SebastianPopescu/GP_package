@@ -5,7 +5,7 @@ from ...inducing_variables import SharedIndependentInducingVariables
 from ...kernels import SharedIndependent
 from gp_package.covariances.bayesian_kuf import BayesianKuf
 
-def Kufs(
+def BayesianKufs(
     inducing_variable: SharedIndependentInducingVariables,
     kernel: SharedIndependent,
     Xnew: tf.Tensor,

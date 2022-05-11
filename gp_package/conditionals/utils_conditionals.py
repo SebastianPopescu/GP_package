@@ -154,6 +154,132 @@ def base_conditional_with_lm(
 
     return fmean, fvar
 
+
+
+def base_bayesian_conditional(
+    Kmn: tf.Tensor,
+    Kmm: tf.Tensor,
+    Knn: tf.Tensor,
+    f: tf.Tensor,
+    *,
+    full_cov: bool = False,
+    white: bool = False,
+) -> MeanAndVariance:
+    r"""
+    Given a g1 and g2, and distribution p and q such that
+      p(g2) = N(g2; 0, Kmm)
+
+      p(g1) = N(g1; 0, Knn)
+      p(g1 | g2) = N(g1; Knm (Kmm⁻¹) g2, Knn - Knm (Kmm⁻¹) Kmn)
+
+    And
+      q(g2) = N(g2; f, q_sqrt q_sqrtᵀ)
+
+    This method computes the mean and (co)variance of
+      q(g1) = ∫ q(g2) p(g1 | g2)
+
+    :param Kmn: [M, ..., N]
+    :param Kmm: [M, M]
+    :param Knn: [..., N, N]  or  N
+    :param f: [M, R]
+    :param full_cov: bool
+
+    :param white: bool
+    :return: [N, R]  or [R, N, N]
+    """
+    Lm = tf.linalg.cholesky(Kmm)
+    return base_bayesian_conditional_with_lm(
+        Kmn=Kmn, Lm=Lm, Knn=Knn, f=f, full_cov=full_cov, white=white
+    )
+
+def base_bayesian_conditional_with_lm(
+    Kmn: tf.Tensor,
+    Lm: tf.Tensor,
+    Knn: tf.Tensor,
+    f: tf.Tensor,
+    *,
+    full_cov: bool = False,
+    white: bool = False,
+) -> MeanAndVariance:
+    r"""
+    Has the same functionality as the `base_conditional` function, except that instead of
+    `Kmm` this function accepts `Lm`, which is the Cholesky decomposition of `Kmm`.
+
+    This allows `Lm` to be precomputed, which can improve performance.
+    """
+    # compute kernel stuff
+    num_func = tf.shape(f)[-1]  # R
+    N = tf.shape(Kmn)[-1]
+    M = tf.shape(f)[-2]
+
+    # get the leading dims in Kmn to the front of the tensor
+    # if Kmn has rank two, i.e. [M, N], this is the identity op.
+    K = tf.rank(Kmn)
+    perm = tf.concat(
+        [
+            tf.reshape(tf.range(1, K - 1), [K - 2]),  # leading dims (...)
+            tf.reshape(0, [1]),  # [M]
+            tf.reshape(K - 1, [1]),
+        ],
+        0,
+    )  # [N]
+    Kmn = tf.transpose(Kmn, perm)  # [..., M, N]
+
+    shape_constraints = [
+        (Kmn, [..., "M", "N"]),
+        (Lm, ["M", "M"]),
+        (Knn, [..., "N", "N"] if full_cov else [..., "N"]),
+        (f, ["M", "R"]),
+    ]
+
+    tf.debugging.assert_shapes(
+        shape_constraints,
+        message="base_conditional() arguments "
+        "[Note that this check verifies the shape of an alternative "
+        "representation of Kmn. See the docs for the actual expected "
+        "shape.]",
+    )
+
+    leading_dims = tf.shape(Kmn)[:-2]
+
+    # Compute the projection matrix A
+    Lm = tf.broadcast_to(Lm, tf.concat([leading_dims, tf.shape(Lm)], 0))  # [..., M, M]
+    A = tf.linalg.triangular_solve(Lm, Kmn, lower=True)  # [..., M, N]
+
+    # compute the covariance due to the conditioning
+    if full_cov:
+        fvar = Knn - tf.linalg.matmul(A, A, transpose_a=True)  # [..., N, N]
+        cov_shape = tf.concat([leading_dims, [num_func, N, N]], 0)
+        fvar = tf.broadcast_to(tf.expand_dims(fvar, -3), cov_shape)  # [..., R, N, N]
+    else:
+        fvar = Knn - tf.reduce_sum(tf.square(A), -2)  # [..., N]
+        cov_shape = tf.concat([leading_dims, [num_func, N]], 0)  # [..., R, N]
+        fvar = tf.broadcast_to(tf.expand_dims(fvar, -2), cov_shape)  # [..., R, N]
+
+    # another backsubstitution in the unwhitened case
+    if not white:
+        A = tf.linalg.triangular_solve(tf.linalg.adjoint(Lm), A, lower=False)
+
+    # construct the conditional mean
+    f_shape = tf.concat([leading_dims, [M, num_func]], 0)  # [..., M, R]
+    f = tf.broadcast_to(f, f_shape)  # [..., M, R]
+    fmean = tf.linalg.matmul(A, f, transpose_a=True)  # [..., N, R]
+
+    if not full_cov:
+        fvar = tf.linalg.adjoint(fvar)  # [N, R]
+
+    shape_constraints = [
+        (Kmn, [..., "M", "N"]),  # tensor included again for N dimension
+        (f, [..., "M", "R"]),  # tensor included again for R dimension
+        (fmean, [..., "N", "R"]),
+        (fvar, [..., "R", "N", "N"] if full_cov else [..., "N", "R"]),
+    ]
+    tf.debugging.assert_shapes(shape_constraints, message="base_conditional() return values")
+
+    return fmean, fvar
+
+
+
 def sample_mvn(
     mean: tf.Tensor, cov: tf.Tensor, full_cov: bool, num_samples: Optional[int] = None
 ) -> tf.Tensor:
