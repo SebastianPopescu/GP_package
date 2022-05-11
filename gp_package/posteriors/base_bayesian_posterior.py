@@ -8,7 +8,7 @@ import tensorflow as tf
 from ..base import MeanAndVariance, Module, Parameter, RegressionData, TensorType
 from ..conditionals.utils_conditionals import *
 from ..config import default_float, default_jitter
-from ..covariances import Kuf, Kuu, Kuus, Kufs
+from ..covariances import BayesianKuf, BayesianKuu, BayesianKuus, BayesianKufs
 from ..inducing_variables import (
     InducingPoints,
     InducingVariables,
@@ -20,7 +20,7 @@ from ..mean_functions import MeanFunction
 class AbstractPosterior(Module, ABC):
     def __init__(
         self,
-        kernel: Kernel,
+        kernel: BayesianKernel,
         X_data: Union[tf.Tensor, InducingVariables],
         cache: Optional[Tuple[tf.Tensor, ...]] = None,
         mean_function: Optional[MeanFunction] = None,
@@ -46,20 +46,28 @@ class AbstractPosterior(Module, ABC):
             return mean + self.mean_function(Xnew)
 
     def fused_predict_f(
-        self, Xnew: TensorType, full_cov: bool = False, full_output_cov: bool = False
+        self, Xnew: TensorType, 
+        U: TensorType,
+        variance: TensorType,
+        lengthscales: TensorType,
+        full_cov: bool = False, full_output_cov: bool = False
     ) -> MeanAndVariance:
         """
         Computes predictive mean and (co)variance at Xnew, including mean_function
         Does not make use of caching
         """
         mean, cov = self._conditional_fused(
-            Xnew, full_cov=full_cov, full_output_cov=full_output_cov
+            Xnew, U, variance, lengthscales,full_cov=full_cov, full_output_cov=full_output_cov
         )
         return self._add_mean_function(Xnew, mean), cov
 
     @abstractmethod
     def _conditional_fused(
-        self, Xnew: TensorType, full_cov: bool = False, full_output_cov: bool = False
+        self, Xnew: TensorType, 
+        U: TensorType,
+        variance: TensorType,
+        lengthscales: TensorType,
+        full_cov: bool = False, full_output_cov: bool = False
     ) -> MeanAndVariance:
         """
         Computes predictive mean and (co)variance at Xnew, *excluding* mean_function
@@ -70,7 +78,7 @@ class AbstractPosterior(Module, ABC):
 class BaseBayesianPosterior(AbstractPosterior):
     def __init__(
         self,
-        kernel: Kernel,
+        kernel: BayesianKernel,
         inducing_variable: InducingVariables,
         whiten: bool = True,
         mean_function: Optional[MeanFunction] = None,
@@ -78,8 +86,6 @@ class BaseBayesianPosterior(AbstractPosterior):
 
         super().__init__(kernel, inducing_variable, mean_function=mean_function)
         self.whiten = whiten
-        #self._set_qdist(q_mu, q_sqrt)
-
 
 
 class IndependentBayesianPosterior(BaseBayesianPosterior):
@@ -89,7 +95,7 @@ class IndependentBayesianPosterior(BaseBayesianPosterior):
     ) -> MeanAndVariance:
         return mean, expand_independent_outputs(cov, full_cov, full_output_cov)
 
-    def _get_Kff(self, Xnew: TensorType, full_cov: bool) -> tf.Tensor:
+    def _get_Kff(self, Xnew: TensorType, variance: TensorType, full_cov: bool) -> tf.Tensor:
 
         # TODO: this assumes that Xnew has shape [N, D] and no leading dims
 
@@ -98,20 +104,23 @@ class IndependentBayesianPosterior(BaseBayesianPosterior):
             # return
             # if full_cov: [P, N, N] -- this is what we want
             # else: [N, P] instead of [P, N] as we get from the explicit stack below
-            Kff = tf.stack([k(Xnew, full_cov=full_cov) for k in self.kernel.kernels], axis=0)
+            Kff = tf.stack([k(variance, Xnew, full_cov=full_cov) for k in self.kernel.kernels], axis=0)
         elif isinstance(self.kernel, MultioutputKernel):
             # effectively, SharedIndependent path
-            Kff = self.kernel.kernel(Xnew, full_cov=full_cov)
+            Kff = self.kernel.kernel(variance, Xnew, full_cov=full_cov)
             # NOTE calling kernel(Xnew, full_cov=full_cov, full_output_cov=False) directly would
             # return
             # if full_cov: [P, N, N] instead of [N, N]
             # else: [N, P] instead of [N]
         else:
             # standard ("single-output") kernels
-            Kff = self.kernel(Xnew, full_cov=full_cov)  # [N, N] if full_cov else [N]
+            Kff = self.kernel(variance, Xnew, full_cov=full_cov)  # [N, N] if full_cov else [N]
 
         return Kff
 
+
+
+'''
 class IndependentPosteriorSingleOutput(IndependentPosterior):
     
     # could almost be the same as IndependentPosteriorMultiOutput ...
@@ -129,10 +138,12 @@ class IndependentPosteriorSingleOutput(IndependentPosterior):
             Kmn, Kmm, Knn, self.q_mu, full_cov=full_cov, q_sqrt=self.q_sqrt, white=self.whiten
         )  # [N, P],  [P, N, N] or [N, P]
         return self._post_process_mean_and_cov(fmean, fvar, full_cov, full_output_cov)
+'''
 
-class IndependentPosteriorMultiOutput(IndependentPosterior):
+class IndependentBayesianPosteriorMultiOutput(IndependentBayesianPosterior):
+
     def _conditional_fused(
-        self, Xnew: TensorType, full_cov: bool = False, full_output_cov: bool = False
+        self, Xnew: TensorType, variance: TensorType, lengthscales: TensorType, full_cov: bool = False, full_output_cov: bool = False
     ) -> MeanAndVariance:
         
         if isinstance(self.X_data, SharedIndependentInducingVariables) and isinstance(
@@ -142,8 +153,6 @@ class IndependentPosteriorMultiOutput(IndependentPosterior):
             # we don't call self.kernel() directly as that would do unnecessary tiling
 
             Kmm = Kuus(self.X_data, self.kernel, jitter=default_jitter())  # [M, M]
-            print('--- inside IndependentPosteriorMultiOutput ---')
-            print(Xnew)
             Kmn = Kufs(self.X_data, self.kernel, Xnew)  # [M, N]
 
             fmean, fvar = base_conditional(

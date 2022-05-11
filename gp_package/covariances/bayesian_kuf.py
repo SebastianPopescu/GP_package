@@ -4,7 +4,7 @@ from ..base import TensorLike, TensorType
 from ..inducing_variables import InducingPoints
 from ..kernels import BayesianKernel, BayesianSquaredExponential
 
-def Kuf(
+def BayesianKuf(
     inducing_variable: InducingPoints, kernel: BayesianKernel, Xnew: TensorType,
     variance: TensorType, 
     lengthscales: TensorType
