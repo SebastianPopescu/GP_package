@@ -24,7 +24,6 @@ import numpy as np
 import tensorflow as tf
 from scipy.cluster.vq import kmeans2
 
-
 from ..kernels import SquaredExponential
 from ..layers import Gaussian
 
