@@ -1,6 +1,8 @@
-from .base_posterior import IndependentPosteriorSingleOutput, IndependentPosteriorMultiOutput
+from .base_posterior import IndependentPosteriorSingleOutput, IndependentPosteriorMultiOutput, IndependentOrthogonalPosteriorSingleOutput, IndependentOrthogonalPosteriorMultiOutput
 
 __all__ = [
     "IndependentPosteriorSingleOutput",
-    "IndependentPosteriorMultiOutput"
+    "IndependentPosteriorMultiOutput",
+    "IndependentOrthogonalPosteriorSingleOutput",
+    "IndependentOrthogonalPosteriorMultiOutput"
 ]

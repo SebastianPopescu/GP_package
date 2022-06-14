@@ -6,10 +6,17 @@ import tensorflow_probability as tfp
 from sklearn.neighbors import KernelDensity
 tf.keras.backend.set_floatx("float64")
 
-from ..models import *
-from ..layers import *
-from ..kernels import *
-from ..inducing_variables import *
+
+from gp_package.models import *
+from gp_package.layers import *
+from gp_package.kernels import *
+from gp_package.inducing_variables import *
+from gp_package.architectures import Config, build_constant_input_dim_dist_deep_gp
+from typing import Callable, Tuple, Optional
+from functools import wraps
+from tensorflow_probability.python.util.deferred_tensor import TensorMetaClass
+
+
 
 def motorcycle_data():
     """ Return inputs and outputs for the motorcycle dataset. We normalise the outputs. """

@@ -42,7 +42,6 @@ VariableData = Union[List[Any], Tuple[Any], AnyNDArray, int, float]  # deprecate
 Transform = Union[tfp.bijectors.Bijector]
 Prior = Union[tfp.distributions.Distribution]
 
-
 # We've left this as object until we've tested the performance consequences of using the full set
 # (np.ndarray, tf.Tensor, tf.Variable, Parameter), see https://github.com/GPflow/GPflow/issues/1434
 TensorLike: Final[Tuple[type, ...]] = (object,)
@@ -51,8 +50,7 @@ TensorLike: Final[Tuple[type, ...]] = (object,)
     `multipledispatch` dispatchers.
 """
 
-
-_NativeScalar = Union[int, float]
+_NativeScalar = Union[int, float]ls
 _Array = Sequence[Any]  # a nested array of int, float, bool etc. kept simple for readability
 
 MeanAndVariance = Tuple[tf.Tensor, tf.Tensor]
