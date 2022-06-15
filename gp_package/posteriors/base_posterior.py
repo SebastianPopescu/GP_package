@@ -344,6 +344,8 @@ class IndependentOrthogonalPosterior(BaseOrthogonalPosterior):
             # else: [N, P] instead of [N]
 
             Kuu = self.kernel.kernel(self.inducing_variable_u.inducing_variable.Z, full_cov=True)
+            jittermat = tf.eye(self.inducing_variable_u.inducing_variable.num_inducing, dtype=Kuu.dtype) * default_jitter()
+            Kuu+= jittermat
             L_Kuu = tf.linalg.cholesky(Kuu)
 
             #Kvv = self.kernel.kernel(self.inducing_variable_v.Z, full_cov=full_cov)
@@ -417,24 +419,15 @@ class IndependentOrthogonalPosteriorMultiOutput(IndependentOrthogonalPosterior):
             self.kernel, SharedIndependent):
             # same as IndependentPosteriorSingleOutput except for following line
 
-            #TODO -- check the shapes of these things
             Knn = self._get_Kff(Xnew, full_cov=full_output_cov)
             Cnn = self._get_Cff(Xnew, full_cov=full_output_cov)
-            print('----------------------- sizes in base_posterior -------------------------')
-            print(Knn)
-            print(Cnn)
 
             Kmm = Kuus(self.inducing_variable_u, self.kernel, jitter=default_jitter())  # [M_u, M_u]
             Kmn = Kufs(self.inducing_variable_u, self.kernel, Xnew)  # [M_U, N]
-            print(Kmm)
-            print(Kmn)
 
             Cmm = Cvvs(self.inducing_variable_v, self.kernel, self.inducing_variable_u, jitter=default_jitter())  # [M_v, M_v]
             Cmn = Cvfs(self.inducing_variable_v, self.kernel, Xnew, self.inducing_variable_u)  # [M_v, N]
-            print(Cmm)
-            print(Cmn)
 
-            # TODO -- create base_orthogonal_conditional
             fmean, fvar = base_orthogonal_conditional(
                 Kmn, Kmm, Knn, Cmn, Cmm, Cnn,
                 self.q_mu_u, self.q_mu_v, full_cov=full_cov, q_sqrt_u=self.q_sqrt_u, q_sqrt_v=self.q_sqrt_v , white=self.whiten

@@ -4,7 +4,7 @@ import tensorflow_probability as tfp
 
 from typing import Any, Union, Optional
 
-from ..config import default_float
+from ..config import default_float, default_jitter
 from ..inducing_variables import InducingPoints
 from ..kernels import Kernel, SquaredExponential
 
@@ -21,6 +21,8 @@ def Cvv(
 
     if not L_Kuu:
         Kuu = kernel(inducing_variable_anchor.Z)
+        jittermat = tf.eye(inducing_variable_anchor.num_inducing, dtype=Kuu.dtype) * default_jitter()
+        Kuu+= jittermat
         L_Kuu = tf.linalg.cholesky(Kuu)
 
     Kuv = kernel(inducing_variable_anchor.Z, inducing_variable.Z)

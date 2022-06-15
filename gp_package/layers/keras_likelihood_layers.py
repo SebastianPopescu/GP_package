@@ -59,11 +59,7 @@ class LikelihoodLayer(tf.keras.layers.Layer):
         if isinstance(self.likelihood, Gaussian):
             F_mean = inputs.loc
             F_var = inputs.scale.diag ** 2
-
-            print('inside Gaussian likelihood layer -- during call function')
-            print(F_mean)
-            print(F_var)
-
+            
             if training:
                 assert targets is not None
                 

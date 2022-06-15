@@ -524,7 +524,7 @@ class Orthogonal_GPLayer(tfp.layers.DistributionLambda):
 
         if kwargs.get("training"):
             #log_prior = tf.add_n([p.log_prior_density() for p in self.kernel.trainable_parameters])
-            loss = self.standard_kl() #+ self.additional_standard_kl()
+            loss = self.standard_kl() + self.additional_standard_kl()
             loss_per_datapoint = loss / self.num_data
 
         else:

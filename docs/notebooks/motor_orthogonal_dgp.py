@@ -133,7 +133,9 @@ def batch_predict(
         for x_batch in tf.data.Dataset.from_tensor_slices(x).batch(
             batch_size=batch_size, drop_remainder=False
         ):
-            batch_predictions = predict_callable(x_batch)
+            batch_predictions, nvm = predict_callable(x_batch)
+            print('---- sanity check step ----')
+            print(batch_predictions)
             batches_f_mean.append(batch_predictions.f_mean)
             batches_f_var.append(batch_predictions.f_var)
             batches_y_mean.append(batch_predictions.y_mean)
@@ -178,7 +180,7 @@ fig, ax = plt.subplots()
 ax.plot(history.history["loss"])
 ax.set_xlabel('Epoch')
 ax.set_ylabel('Loss')
-plt.savefig('./motor_dataset_loss_during_training_orthogonal_svgp.png')
+plt.savefig('./motor_dataset_loss_during_training_orthogonal_deep_gp_2_layers.png')
 plt.close()
 
 fig, ax = plt.subplots()
@@ -188,6 +190,7 @@ model = dist_deep_gp.as_prediction_model()
 #out = model(X_test)
 out = batch_predict(model)(X_test)
 
+print(out)
 
 mu = out.y_mean.numpy().squeeze()
 var = out.y_var.numpy().squeeze()
@@ -204,7 +207,7 @@ ax.plot(X, Y, "kx", alpha=0.5)
 ax.plot(X_test, mu, "C1")
 ax.set_xlabel('time')
 ax.set_ylabel('acc')
-plt.savefig('./motor_dataset_predictions_testing_orthogonal_svgp.png')
+plt.savefig('./motor_dataset_predictions_testing_orthogonal_deep_gp_2_layers.png')
 plt.close()
 
 
