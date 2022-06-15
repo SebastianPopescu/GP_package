@@ -266,22 +266,6 @@ def base_orthogonal_conditional_with_lm(
             (q_sqrt_v, (["V", "R"] if q_sqrt_v.shape.ndims == 2 else ["R", "V", "V"]))
         )
 
-    print('-----------------------------------------------------------')
-    print('-- check this now --')
-
-    print(Kmn)
-    print(Lm)
-    print(Knn)
-    print(f_u) 
-    print(Cmn)
-    print(L_Cmm)
-    print(Cnn)
-    print(f_v)
-    print(q_sqrt_u) 
-    print(q_sqrt_v) 
-
-
-
     tf.debugging.assert_shapes(
         shape_constraints,
         message="base_orthogonal_conditional() arguments "

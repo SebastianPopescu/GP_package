@@ -514,12 +514,17 @@ class Orthogonal_GPLayer(tfp.layers.DistributionLambda):
         this layer and the GP prior (scaled to per-datapoint).
         """
 
+        if self.name=='orthogonal_gp_0':
+            pass
+        else:
+            assert isinstance(inputs, tfp.distributions.MultivariateNormalDiag)
+
         # I think this is getting just the samples from the distribution 
         outputs = super().call(inputs, *args, **kwargs)
 
         if kwargs.get("training"):
             #log_prior = tf.add_n([p.log_prior_density() for p in self.kernel.trainable_parameters])
-            loss = self.standard_kl() + self.additional_standard_kl()
+            loss = self.standard_kl() #+ self.additional_standard_kl()
             loss_per_datapoint = loss / self.num_data
 
         else:
@@ -555,7 +560,6 @@ class Orthogonal_GPLayer(tfp.layers.DistributionLambda):
         return standard_kl(
             self.inducing_variable_v, self.kernel, self.q_mu_v, self.q_sqrt_v, whiten=self.whiten
         )
-
 
     def _make_distribution_fn(
         self, previous_layer_outputs: TensorType
