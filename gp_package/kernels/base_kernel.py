@@ -89,7 +89,8 @@ class Kernel(Module, metaclass=abc.ABCMeta):
         other_dims = other.active_dims.reshape(1, -1)
         return not np.any(this_dims == other_dims)
 
-    # Warning -- only works for Euclidean kernels
+    # NOTE -- only works for Euclidean kernels; for Wasserstein-2 based kernels it would transform the distributions into samples, hence breaking subsequent operations
+
     def slice(self, X: TensorType, X2: Optional[TensorType] = None) -> Tuple[tf.Tensor, tf.Tensor]:
         """
         Slice the correct dimensions for use in the kernel, as indicated by `self.active_dims`.
@@ -109,7 +110,8 @@ class Kernel(Module, metaclass=abc.ABCMeta):
                 X2 = tf.gather(X2, dims, axis=-1)
         return X, X2
 
-    # Warning -- only works for Euclidean kernels
+    # NOTE -- only works for Euclidean kernels; for Wasserstein-2 based kernels it would transform the distributions into samples, hence breaking subsequent operations
+
     def slice_cov(self, cov: TensorType) -> tf.Tensor:
         """
         Slice the correct dimensions for use in the kernel, as indicated by
@@ -144,7 +146,8 @@ class Kernel(Module, metaclass=abc.ABCMeta):
 
         return cov
 
-    # Warning -- only works for Euclidean kernels
+    # NOTE -- only works for Euclidean kernels; for Wasserstein-2 based kernels it would transform the distributions into samples, hence breaking subsequent operations
+
     def _validate_ard_active_dims(self, ard_parameter: TensorType) -> None:
         """
         Validate that ARD parameter matches the number of active_dims (provided active_dims
@@ -164,18 +167,18 @@ class Kernel(Module, metaclass=abc.ABCMeta):
             )
 
     @abc.abstractmethod
-    def K(self, X: Union[TensorType,tfp.distributions.MultivariateNormalDiag], 
-        X2: Optional[Union[TensorType,tfp.distributions.MultivariateNormalDiag]] = None) -> tf.Tensor:
+    def K(self, X: TensorType, 
+        X2: Optional[TensorType] = None) -> tf.Tensor:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def K_diag(self, X: Union[TensorType,tfp.distributions.MultivariateNormalDiag]) -> tf.Tensor:
+    def K_diag(self, X: TensorType) -> tf.Tensor:
         raise NotImplementedError
 
     def __call__(
         self,
-        X: Union[TensorType,tfp.distributions.MultivariateNormalDiag],
-        X2: Optional[Union[TensorType,tfp.distributions.MultivariateNormalDiag]] = None,
+        X: TensorType,
+        X2: Optional[TensorType] = None,
         *,
         full_cov: bool = True,
         presliced: bool = False,
@@ -192,10 +195,7 @@ class Kernel(Module, metaclass=abc.ABCMeta):
             return self.K_diag(X)
 
         else:
-            if isinstance(X, tfp.distributions.MultivariateNormalDiag):
-                return self.K(X,X2, seed = seed)
-            else:
-                return self.K(X, X2)
+            return self.K(X, X2)
 
     def __add__(self, other: "Kernel") -> "Kernel":
         return Sum([self, other])

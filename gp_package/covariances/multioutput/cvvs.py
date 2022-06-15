@@ -22,7 +22,7 @@ def Cvvs(
     """
     
     _Cvv = Cvv(inducing_variable.inducing_variable, kernel.kernel, inducing_variable_anchor.inducing_variable, seed = seed)  # [M, M]
-    jittermat = tf.eye(inducing_variable.num_inducing, dtype=Cvv.dtype) * jitter
+    jittermat = tf.eye(inducing_variable.num_inducing, dtype=_Cvv.dtype) * jitter
     return _Cvv + jittermat
 
 

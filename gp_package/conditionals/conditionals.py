@@ -9,8 +9,8 @@ from ..base import MeanAndVariance
 from ..posteriors import IndependentPosteriorSingleOutput, IndependentPosteriorMultiOutput, IndependentOrthogonalPosteriorSingleOutput, IndependentOrthogonalPosteriorMultiOutput
 
 def conditional_GP(
-    Xnew: Union[tf.Tensor, tfp.distributions.MultivariateNormalDiag],
-    inducing_variable: Union[InducingVariables,DistributionalInducingVariables],
+    Xnew: tf.Tensor,
+    inducing_variable: InducingVariables,
     kernel: Kernel,
     f: tf.Tensor,
     *,
@@ -113,14 +113,13 @@ def conditional_orthogonal_GP(
         about the shape of the variance, depending on `full_cov` and `full_output_cov`.
     """
     
-    # TODO -- create this class
     posterior =  IndependentOrthogonalPosteriorMultiOutput(
         kernel,
         inducing_variable_u,
         inducing_variable_v,
         f_u,
-        f_v,
         q_sqrt_u,
+        f_v,
         q_sqrt_v,
         whiten=white,
         mean_function=None,

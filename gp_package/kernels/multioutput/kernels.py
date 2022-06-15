@@ -51,8 +51,8 @@ class MultioutputKernel(Kernel):
 
     @abc.abstractmethod
     def K(
-        self, X: Union[TensorType,tfp.distributions.MultivariateNormalDiag], 
-        X2: Optional[Union[TensorType,tfp.distributions.MultivariateNormalDiag]] = None, full_output_cov: bool = True
+        self, X: TensorType, 
+        X2: Optional[TensorType] = None, full_output_cov: bool = True
     ) -> tf.Tensor:
         """
         Returns the correlation of f(X) and f(X2), where f(.) can be multi-dimensional.
@@ -79,8 +79,8 @@ class MultioutputKernel(Kernel):
 
     def __call__(
         self,
-        X: Union[TensorType,tfp.distributions.MultivariateNormalDiag],
-        X2: Optional[Union[TensorType,tfp.distributions.MultivariateNormalDiag]] = None,
+        X: TensorType,
+        X2: Optional[TensorType] = None,
         *,
         full_cov: bool = False,
         full_output_cov: bool = True,
@@ -121,8 +121,8 @@ class SharedIndependent(MultioutputKernel):
         return (self.kernel,)
 
     def K(
-        self, X: Union[TensorType,tfp.distributions.MultivariateNormalDiag], 
-        X2: Optional[Union[TensorType,tfp.distributions.MultivariateNormalDiag]] = None, full_output_cov: bool = True
+        self, X: TensorType, 
+        X2: Optional[TensorType] = None, full_output_cov: bool = True
     ) -> tf.Tensor:
         print('inside K from Shared Independent')
         print(X2)

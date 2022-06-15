@@ -22,12 +22,12 @@ def Cvv(
 
     if not L_Kuu:
         Kuu = kernel(inducing_variable_anchor.Z)
-        L_Kuu = tf.cholesky(Kuu)
+        L_Kuu = tf.linalg.cholesky(Kuu)
 
     #Kvv = self.kernel.kernel(self.inducing_variable_v.Z, full_cov=full_cov)
     Kuv = kernel(inducing_variable_anchor.Z, inducing_variable.Z)
 
-    L_Kuu_inv_Kuv = tf.matrix_triangular_solve(L_Kuu, Kuv)
+    L_Kuu_inv_Kuv = tf.linalg.triangular_solve(L_Kuu, Kuv)
     Cvv = Kvv - tf.linalg.matmul(
         L_Kuu_inv_Kuv, L_Kuu_inv_Kuv, transpose_a=True)
 

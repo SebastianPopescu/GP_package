@@ -50,7 +50,6 @@ class Config:
     of inducing variables in each layer.
     """
 
-
     num_inducing_v: int
     """
     The number of inducing variables, *M*. The Deep GP uses the same number
@@ -169,7 +168,8 @@ def build_constant_input_dim_orthogonal_deep_gp(X: np.ndarray, num_layers: int, 
             mean_function=mean_function,
             name=f"orthogonal_gp_{i_layer}",
         )
-        layer.q_sqrt.assign(layer.q_sqrt * q_sqrt_scaling)
+        layer.q_sqrt_u.assign(layer.q_sqrt_u * q_sqrt_scaling)
+        layer.q_sqrt_v.assign(layer.q_sqrt_v * q_sqrt_scaling)
         gp_layers.append(layer)
 
     likelihood = Gaussian(config.likelihood_noise_variance)

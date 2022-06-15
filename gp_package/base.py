@@ -27,16 +27,21 @@ if TYPE_CHECKING:  # pragma: no cover
     from IPython.lib import pretty
 
 DType = Union[np.dtype, tf.DType]
+from .type_flags import GENERIC_NP_ARRAYS, NP_TYPE_CHECKING
 
-# It would be nice to use something more interesting than `Any` here, but it looks like the
-# infrastructure in the rest of the ecosystem isn't really set up for this yet. Maybe when we
-# get Python 3.11?
-if TYPE_CHECKING:  # pragma: no cover
-    AnyNDArray = Union["np.ndarray[Any, Any]"]
-elif Version(np.__version__) < Version("1.20.0"):
-    AnyNDArray = np.ndarray
+
+if TYPE_CHECKING and (not NP_TYPE_CHECKING):  # pragma: no cover
+    AnyNDArray = Any
 else:
-    AnyNDArray = np.ndarray[Any, Any]
+    if GENERIC_NP_ARRAYS:
+        # It would be nice to use something more interesting than `Any` here, but it looks like
+        # the infrastructure in the rest of the ecosystem isn't really set up for this
+        # yet. Maybe when we get Python 3.11?
+        AnyNDArray = np.ndarray[Any, Any]  # type: ignore
+    else:
+        AnyNDArray = Union[np.ndarray]  # type: ignore
+
+
 
 VariableData = Union[List[Any], Tuple[Any], AnyNDArray, int, float]  # deprecated
 Transform = Union[tfp.bijectors.Bijector]
@@ -50,7 +55,7 @@ TensorLike: Final[Tuple[type, ...]] = (object,)
     `multipledispatch` dispatchers.
 """
 
-_NativeScalar = Union[int, float]ls
+_NativeScalar = Union[int, float]
 _Array = Sequence[Any]  # a nested array of int, float, bool etc. kept simple for readability
 
 MeanAndVariance = Tuple[tf.Tensor, tf.Tensor]

@@ -197,6 +197,8 @@ class GPLayer(tfp.layers.DistributionLambda):
         this layer and the GP prior (scaled to per-datapoint).
         """
 
+
+
         # I think this is getting just the samples from the distribution 
         outputs = super().call(inputs, *args, **kwargs)
 
@@ -302,8 +304,6 @@ class GPLayer(tfp.layers.DistributionLambda):
             + self.mean_function
         )
     """
-
-
 
 class Orthogonal_GPLayer(tfp.layers.DistributionLambda):
     """
@@ -416,7 +416,10 @@ class Orthogonal_GPLayer(tfp.layers.DistributionLambda):
         num_inducing_v = self.inducing_variable_v.num_inducing
         self.num_latent_gps = num_latent_gps
 
+        ########################################################
         ###### Introduce variational parameters for q(U) #######
+        ########################################################
+
         self.q_mu_u = Parameter(
             np.random.uniform(-0.5, 0.5, (num_inducing_u, self.num_latent_gps)), # np.zeros((num_inducing, self.num_latent_gps)),
             dtype=default_float(),
@@ -430,8 +433,10 @@ class Orthogonal_GPLayer(tfp.layers.DistributionLambda):
             name=f"{self.name}_q_sqrt_u" if self.name else "q_sqrt_u",
         )  # [num_latent_gps, num_inducing, num_inducing]
 
-
+        ########################################################
         ###### Introduce variational parameters for q(V) #######
+        ########################################################
+
         self.q_mu_v = Parameter(
             np.random.uniform(-0.5, 0.5, (num_inducing_v, self.num_latent_gps)), # np.zeros((num_inducing, self.num_latent_gps)),
             dtype=default_float(),
@@ -478,7 +483,7 @@ class Orthogonal_GPLayer(tfp.layers.DistributionLambda):
         :returns: posterior mean (shape [N, Q]) and (co)variance (shape as above) at test points
         """
         mean_function = self.mean_function(inputs)
-        # TODO -- create conditional_orthogonal_GP class
+
         mean_cond, cov = conditional_orthogonal_GP(
             inputs,
             self.inducing_variable_u,
@@ -512,7 +517,6 @@ class Orthogonal_GPLayer(tfp.layers.DistributionLambda):
         # I think this is getting just the samples from the distribution 
         outputs = super().call(inputs, *args, **kwargs)
 
-
         if kwargs.get("training"):
             #log_prior = tf.add_n([p.log_prior_density() for p in self.kernel.trainable_parameters])
             loss = self.standard_kl() + self.additional_standard_kl()
@@ -544,8 +548,10 @@ class Orthogonal_GPLayer(tfp.layers.DistributionLambda):
         r"""
         Returns the KL divergence ``KL[q(v)∥p(v)]`` from the prior ``p(v)`` to
         the variational distribution ``q(v)``.  If this layer uses the
-        :attr:`whiten`\ ed representation, returns ``KL[q(v)∥p(v)]``.
+        :attr:`whiten`\ ed representation, returns ``KL[q(v of v)∥p(v of v)]``.
         """
+        # NOTE -- in the un-whitened case, we have to add self.inducing_variable_u since we need to compute Cvv
+        # TODO -- make this useable also in un-whitened case
         return standard_kl(
             self.inducing_variable_v, self.kernel, self.q_mu_v, self.q_sqrt_v, whiten=self.whiten
         )

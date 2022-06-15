@@ -24,12 +24,12 @@ def Cvf(
 
     if not L_Kuu:
         Kuu = kernel(inducing_variable_anchor.Z)
-        L_Kuu = tf.cholesky(Kuu)
+        L_Kuu = tf.linalg.cholesky(Kuu)
 
     #Kvv = self.kernel.kernel(self.inducing_variable_v.Z, full_cov=full_cov)
     Kuf = kernel(inducing_variable_anchor.Z, Xnew)
 
-    L_Kuu_inv_Kuf = tf.matrix_triangular_solve(L_Kuu, Kuf)
+    L_Kuu_inv_Kuf = tf.linalg.triangular_solve(L_Kuu, Kuf)
     Cvf = Kvf - tf.linalg.matmul(
         L_Kuu_inv_Kuf, L_Kuu_inv_Kuf, transpose_a=True)
 

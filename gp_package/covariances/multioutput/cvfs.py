@@ -20,5 +20,5 @@ def Cvfs(
     """
     Warning -- this currently works just with shared variables, hence a single kernel and associated hyperparameters per layer
     """
-    return Cvf(inducing_variable.inducing_variable,  Xnew, kernel.kernel, inducing_variable_anchor, seed = seed)  # [M, N]
+    return Cvf(inducing_variable.inducing_variable,  Xnew, kernel.kernel, inducing_variable_anchor.inducing_variable, seed = seed)  # [M, N]
 

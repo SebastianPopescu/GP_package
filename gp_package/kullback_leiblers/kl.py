@@ -22,12 +22,12 @@ from typing import Union
 from ..base import TensorType
 from ..config import default_float, default_jitter
 from ..covariances import Kuu
-from ..inducing_variables import InducingVariables, DistributionalInducingVariables
+from ..inducing_variables import InducingVariables
 from ..kernels import Kernel
 from ..utils import to_default_float
 
 def standard_kl(
-    inducing_variable: Union[InducingVariables,DistributionalInducingVariables],
+    inducing_variable: InducingVariables,
     kernel: Kernel,
     q_mu: TensorType,
     q_sqrt: TensorType,

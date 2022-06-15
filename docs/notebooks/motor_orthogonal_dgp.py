@@ -22,7 +22,7 @@ from tensorflow_probability.python.util.deferred_tensor import TensorMetaClass
 def motorcycle_data():
     """ Return inputs and outputs for the motorcycle dataset. We normalise the outputs. """
     import pandas as pd
-    df = pd.read_csv("/home/sebastian.popescu/Desktop/my_code/Dist_DGPs_v2/code/notebooks/data/motor.csv", index_col=0)
+    df = pd.read_csv("/home/sebastian.popescu/Desktop/my_code/GP_package/data/motor.csv", index_col=0)
     X, Y = df["times"].values.reshape(-1, 1), df["accel"].values.reshape(-1, 1)
     Y = (Y - Y.mean()) / Y.std()
     X /= X.max()
@@ -150,8 +150,6 @@ def batch_predict(
 
 
 
-
-
 X, Y = motorcycle_data()
 num_data, d_xim = X.shape
 
@@ -163,13 +161,14 @@ ax.set_xlim(X.min() - X_MARGIN, X.max() + X_MARGIN);
 plt.savefig('./motor_dataset.png')
 plt.close()
 
-
 NUM_INDUCING = 10
+NUM_LAYERS = 1
 
 config = Config(
-    num_inducing_u=NUM_INDUCING, num_inducing_v=NUM_INDUCING, inner_layer_qsqrt_factor=1e-1, likelihood_noise_variance=1e-2, whiten=True, hidden_layer_size=X.shape[1]
+    num_inducing_u=NUM_INDUCING, num_inducing_v=NUM_INDUCING, inner_layer_qsqrt_factor=1e-1, likelihood_noise_variance=1e-2, 
+    whiten=True, hidden_layer_size=X.shape[1]
 )
-dist_deep_gp: DistDeepGP = build_constant_input_dim_orthogonal_deep_gp(X, num_layers=1, config=config, dim_output=1)
+dist_deep_gp: DistDeepGP = build_constant_input_dim_orthogonal_deep_gp(X, num_layers=NUM_LAYERS, config=config)
 
 model = dist_deep_gp.as_training_model()
 model.compile(tf.optimizers.Adam(1e-2))
