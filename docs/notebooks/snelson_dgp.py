@@ -11,7 +11,7 @@ from gp_package.models import *
 from gp_package.layers import *
 from gp_package.kernels import *
 from gp_package.inducing_variables import *
-from gp_package.architectures import Config, build_constant_input_dim_dist_deep_gp
+from gp_package.architectures import Config, build_constant_input_dim_deep_gp
 
 
 class ToyData1D(object):
@@ -98,12 +98,16 @@ if __name__=="__main__":
     single_layer_dgp = DeepGP(gp_layers, likelihood_layer, num_data=X.shape[0])
     """
 
-    config = Config(
-        num_inducing=10, inner_layer_qsqrt_factor=1e-1, likelihood_noise_variance=1e-2, whiten=True, hidden_layer_size=X.shape[1]
-    )
-    dist_deep_gp: DistDeepGP = build_constant_input_dim_dist_deep_gp(X, num_layers=2, config=config)
+    NUM_INDUCING = 10
+    NUM_LAYERS = 2
 
-    model = dist_deep_gp.as_training_model()
+    config = Config(
+        num_inducing=NUM_INDUCING, inner_layer_qsqrt_factor=1e-1, likelihood_noise_variance=1e-2, 
+        whiten=True, hidden_layer_size=X.shape[1]
+    )
+    deep_gp: DeepGP = build_constant_input_dim_deep_gp(X, num_layers=NUM_LAYERS, config=config)
+
+    model = deep_gp.as_training_model()
     model.compile(tf.optimizers.Adam(1e-2))
 
     history = model.fit({"inputs": X, "targets": Y}, epochs=int(1), verbose=1)
@@ -111,13 +115,13 @@ if __name__=="__main__":
     ax.plot(history.history["loss"])
     ax.set_xlabel('Epoch')
     ax.set_ylabel('Loss')
-    plt.savefig('./simple_dataset_loss_during_training.png')
+    plt.savefig('./snelson_dataset_loss_dgp.png')
     plt.close()
 
     fig, ax = plt.subplots()
     num_data_test = 200
     X_test = np.linspace(X.min() - X_MARGIN, X.max() + X_MARGIN, num_data_test).reshape(-1, 1)
-    model = dist_deep_gp.as_prediction_model()
+    model = deep_gp.as_prediction_model()
     out = model(X_test)
 
     mu = out.y_mean.numpy().squeeze()
@@ -135,7 +139,7 @@ if __name__=="__main__":
     ax.plot(X_test, mu, "C1")
     ax.set_xlabel('time')
     ax.set_ylabel('acc')
-    plt.savefig('./simple_dataset_predictions_testing.png')
+    plt.savefig('./snelson_dataset_dgp.png')
     plt.close()
 
 
