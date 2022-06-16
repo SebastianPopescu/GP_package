@@ -76,7 +76,8 @@ class LikelihoodLayer(tf.keras.layers.Layer):
             if training:
                 assert targets is not None
                 
-                loss_per_datapoint = -self.likelihood.log_prob(inputs, targets)
+                # TODO -- don't we need to use tf.reduce_mean on this??
+                loss_per_datapoint = -self.likelihood._log_prob(inputs, targets)
                 Y_mean = Y_var = None
 
             else:
@@ -85,6 +86,24 @@ class LikelihoodLayer(tf.keras.layers.Layer):
 
             F_mean = inputs.loc
             F_var = inputs.scale.diag ** 2
+
+        else:
+
+            #NOTE -- this is currently covering the Heteroskedastic likelihood case 
+            if training:
+                assert targets is not None
+                
+                # TODO -- don't we need to use tf.reduce_mean on this??
+                loss_per_datapoint = tf.reduce_mean(-self.likelihood.log_prob(inputs, targets))
+                Y_mean = Y_var = None
+
+            else:
+                loss_per_datapoint = tf.constant(0.0, dtype=default_float())
+                Y_mean = Y_var = None
+
+            F_mean = inputs.loc
+            F_var = inputs.scale.diag ** 2
+
 
         self.add_loss(loss_per_datapoint)
 

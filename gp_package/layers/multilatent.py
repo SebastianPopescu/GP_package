@@ -62,7 +62,7 @@ class MultiLatentTFPConditional(MultiLatentLikelihood):
         """
         The log probability density log p(Y|F)
 
-        :param F: function evaluation Tensor, with shape [..., latent_dim]
+        :param Fs: function evaluation Tensor, with shape [..., latent_dim]
         :param Y: observation Tensor, with shape [..., 1]:
         :returns: log pdf, with shape [...]
         """

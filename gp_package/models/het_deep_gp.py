@@ -24,9 +24,10 @@ from ..base import Module, TensorType
 from ..layers import GPLayer, LikelihoodLayer, Likelihood, HeteroskedasticTFPConditional
 #from gpflux.sampling.sample import Sample
 
-class DeepGP(Module):
+class HeteroskedasticDeepGP(Module):
     
     """
+    #TODO -- update documentation for model
     This class combines a sequential function model ``f(x) = fₙ(⋯ (f₂(f₁(x))))``
     and a likelihood ``p(y|f)``
     
