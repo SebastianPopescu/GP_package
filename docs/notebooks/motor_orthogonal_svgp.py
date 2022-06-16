@@ -14,12 +14,10 @@ from gp_package.models import *
 from gp_package.layers import *
 from gp_package.kernels import *
 from gp_package.inducing_variables import *
-from gp_package.architectures import build_constant_input_dim_deep_gp
+from gp_package.architectures import build_constant_input_dim_orthogonal_deep_gp
 from typing import Callable, Tuple, Optional
 from functools import wraps
 from tensorflow_probability.python.util.deferred_tensor import TensorMetaClass
-
-import os
 
 def motorcycle_data():
     """ Return inputs and outputs for the motorcycle dataset. We normalise the outputs. """
@@ -37,7 +35,14 @@ class Config:
     The configuration used by :func:`build_constant_input_dim_orthogonal_deep_gp`.
     """
 
-    num_inducing: int
+    num_inducing_u: int
+    """
+    The number of inducing variables, *M*. The Deep GP uses the same number
+    of inducing variables in each layer.
+    """
+
+
+    num_inducing_v: int
     """
     The number of inducing variables, *M*. The Deep GP uses the same number
     of inducing variables in each layer.
@@ -129,6 +134,8 @@ def batch_predict(
             batch_size=batch_size, drop_remainder=False
         ):
             batch_predictions, nvm = predict_callable(x_batch)
+            print('---- sanity check step ----')
+            print(batch_predictions)
             batches_f_mean.append(batch_predictions.f_mean)
             batches_f_var.append(batch_predictions.f_var)
             batches_y_mean.append(batch_predictions.y_mean)
@@ -144,6 +151,7 @@ def batch_predict(
     return wrapper
 
 
+
 X, Y = motorcycle_data()
 num_data, d_xim = X.shape
 
@@ -155,29 +163,25 @@ ax.set_xlim(X.min() - X_MARGIN, X.max() + X_MARGIN);
 plt.savefig('./motor_dataset.png')
 plt.close()
 
-
 NUM_INDUCING = 10
-NUM_LAYERS = 2
+NUM_LAYERS = 1
 
 config = Config(
-    num_inducing=NUM_INDUCING, inner_layer_qsqrt_factor=1e-1, 
-    likelihood_noise_variance=1e-2, whiten=True, hidden_layer_size=X.shape[1]
+    num_inducing_u=NUM_INDUCING, num_inducing_v=NUM_INDUCING, inner_layer_qsqrt_factor=1e-1, likelihood_noise_variance=1e-2, 
+    whiten=True, hidden_layer_size=X.shape[1]
 )
-dist_deep_gp: DistDeepGP = build_constant_input_dim_deep_gp(X, num_layers=NUM_LAYERS, config=config)
+dist_deep_gp: DistDeepGP = build_constant_input_dim_orthogonal_deep_gp(X, num_layers=NUM_LAYERS, config=config)
 
 model = dist_deep_gp.as_training_model()
 model.compile(tf.optimizers.Adam(1e-2))
 
 history = model.fit({"inputs": X, "targets": Y}, epochs=int(2e3), verbose=1)
-
-cmd = 'mkdir -p ./figures'
-os.system(cmd)
-
 fig, ax = plt.subplots()
 ax.plot(history.history["loss"])
 ax.set_xlabel('Epoch')
+
 ax.set_ylabel('Loss')
-plt.savefig(f"./figures/motor_dataset_loss_dgp_num_layers_{NUM_LAYERS}_num_inducing_{NUM_INDUCING}.png")
+plt.savefig('./figures/motor_dataset_loss_during_training_orthogonal_svgp.png')
 plt.close()
 
 fig, ax = plt.subplots()
@@ -185,35 +189,12 @@ num_data_test = 200
 X_test = np.linspace(X.min() - X_MARGIN, X.max() + X_MARGIN, num_data_test).reshape(-1, 1)
 model = dist_deep_gp.as_prediction_model()
 #out = model(X_test)
-#out = model(X_test)
-NUM_TESTING = X_test.shape[0]
-
-### Multi-sample case ##
-# NOTE -- we just tile X_test NUM_SAMPLES times
-
-NUM_SAMPLES = 25
-
-X_test_tiled = np.tile(X_test, (NUM_SAMPLES,1))
-out = batch_predict(model)(X_test_tiled)
+out = batch_predict(model)(X_test)
 
 print(out)
 
 mu = out.y_mean.numpy().squeeze()
 var = out.y_var.numpy().squeeze()
-
-print(' ---- size of predictions ----')
-print(mu.shape)
-print(var.shape)
-
-mu = np.mean(mu.reshape((NUM_SAMPLES, NUM_TESTING)), axis = 0)
-var = np.mean(var.reshape((NUM_SAMPLES, NUM_TESTING)), axis = 0)
-
-print(' ---- size of predictions ----')
-print(mu.shape)
-print(var.shape)
-
-
-
 X_test = X_test.squeeze()
 
 for i in [1, 2]:
@@ -227,9 +208,8 @@ ax.plot(X, Y, "kx", alpha=0.5)
 ax.plot(X_test, mu, "C1")
 ax.set_xlabel('time')
 ax.set_ylabel('acc')
-plt.savefig(f"./figures/motor_dataset_dgp_num_layers_{NUM_LAYERS}_num_inducing_{NUM_INDUCING}.png")
+plt.savefig('./figures/motor_dataset_orthogonal_svgp.png')
 plt.close()
-
 
 
 

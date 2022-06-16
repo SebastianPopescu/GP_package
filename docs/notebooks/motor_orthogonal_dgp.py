@@ -113,7 +113,7 @@ class LikelihoodOutputs(tf.Module, metaclass=TensorMetaClass):
 
 
 def batch_predict(
-    predict_callable: Callable[[np.ndarray], Tuple[np.ndarray, ...]], batch_size: int = 1000
+    predict_callable: Callable[[np.ndarray], Tuple[np.ndarray, ...]], batch_size: int = 1000, num_samples: Optional[int] = None
 ) -> Callable[[np.ndarray], Tuple[np.ndarray, ...]]:
     """
     Simple wrapper that transform a full dataset predict into batch predict.
@@ -150,8 +150,6 @@ def batch_predict(
 
     return wrapper
 
-
-
 X, Y = motorcycle_data()
 num_data, d_xim = X.shape
 
@@ -175,12 +173,12 @@ dist_deep_gp: DistDeepGP = build_constant_input_dim_orthogonal_deep_gp(X, num_la
 model = dist_deep_gp.as_training_model()
 model.compile(tf.optimizers.Adam(1e-2))
 
-history = model.fit({"inputs": X, "targets": Y}, epochs=int(1e3), verbose=1)
+history = model.fit({"inputs": X, "targets": Y}, epochs=int(2e3), verbose=1)
 fig, ax = plt.subplots()
 ax.plot(history.history["loss"])
 ax.set_xlabel('Epoch')
 ax.set_ylabel('Loss')
-plt.savefig('./motor_dataset_loss_during_training_orthogonal_deep_gp_2_layers.png')
+plt.savefig(f"./figures/motor_dataset_loss_orthogonal_deep_gp_num_layers_{NUM_LAYERS}_num_inducing_{NUM_INDUCING}.png")
 plt.close()
 
 fig, ax = plt.subplots()
@@ -188,12 +186,32 @@ num_data_test = 200
 X_test = np.linspace(X.min() - X_MARGIN, X.max() + X_MARGIN, num_data_test).reshape(-1, 1)
 model = dist_deep_gp.as_prediction_model()
 #out = model(X_test)
-out = batch_predict(model)(X_test)
+NUM_TESTING = X_test.shape[0]
+
+### Multi-sample case ##
+# NOTE -- we just tile X_test NUM_SAMPLES times
+
+NUM_SAMPLES = 25
+
+X_test_tiled = np.tile(X_test, (NUM_SAMPLES,1))
+out = batch_predict(model)(X_test_tiled)
 
 print(out)
 
 mu = out.y_mean.numpy().squeeze()
 var = out.y_var.numpy().squeeze()
+
+print(' ---- size of predictions ----')
+print(mu.shape)
+print(var.shape)
+
+mu = np.mean(mu.reshape((NUM_SAMPLES, NUM_TESTING)), axis = 0)
+var = np.mean(var.reshape((NUM_SAMPLES, NUM_TESTING)), axis = 0)
+
+print(' ---- size of predictions ----')
+print(mu.shape)
+print(var.shape)
+
 X_test = X_test.squeeze()
 
 for i in [1, 2]:
@@ -207,7 +225,7 @@ ax.plot(X, Y, "kx", alpha=0.5)
 ax.plot(X_test, mu, "C1")
 ax.set_xlabel('time')
 ax.set_ylabel('acc')
-plt.savefig('./motor_dataset_predictions_testing_orthogonal_deep_gp_2_layers.png')
+plt.savefig(f"./figures//motor_dataset_orthogonal_deep_gp_num_layers_{NUM_LAYERS}_num_inducing_{NUM_INDUCING}.png")
 plt.close()
 
 
