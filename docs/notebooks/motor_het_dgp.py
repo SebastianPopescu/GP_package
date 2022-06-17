@@ -131,14 +131,14 @@ def batch_predict(
             batch_predictions, nvm = predict_callable(x_batch)
             batches_f_mean.append(batch_predictions.f_mean)
             batches_f_var.append(batch_predictions.f_var)
-            batches_y_mean.append(batch_predictions.y_mean)
-            batches_y_var.append(batch_predictions.y_var)
+            #batches_y_mean.append(batch_predictions.y_mean)
+            #batches_y_var.append(batch_predictions.y_var)
 
         return LikelihoodOutputs(
             tf.concat(batches_f_mean, axis=0),
             tf.concat(batches_f_var, axis=0),
-            tf.concat(batches_y_mean, axis=0),
-            tf.concat(batches_y_var, axis=0)
+            None,
+            None
         )
 
     return wrapper
@@ -155,9 +155,8 @@ ax.set_xlim(X.min() - X_MARGIN, X.max() + X_MARGIN);
 plt.savefig('./motor_dataset.png')
 plt.close()
 
-
-NUM_INDUCING = 10
-NUM_LAYERS = 2
+NUM_INDUCING = 20
+NUM_LAYERS = 1
 
 config = Config(
     num_inducing=NUM_INDUCING, inner_layer_qsqrt_factor=1e-1, 
@@ -191,15 +190,15 @@ NUM_TESTING = X_test.shape[0]
 ### Multi-sample case ##
 # NOTE -- we just tile X_test NUM_SAMPLES times
 
-NUM_SAMPLES = 25
+NUM_SAMPLES = 100
 
 X_test_tiled = np.tile(X_test, (NUM_SAMPLES,1))
 out = batch_predict(model)(X_test_tiled)
 
 print(out)
 
-mu = out.y_mean.numpy().squeeze()
-var = out.y_var.numpy().squeeze()
+mu = out.f_mean.numpy().squeeze()
+var = out.f_var.numpy().squeeze()
 
 print(' ---- size of predictions ----')
 print(mu.shape)
@@ -211,8 +210,6 @@ var = np.mean(var.reshape((NUM_SAMPLES, NUM_TESTING)), axis = 0)
 print(' ---- size of predictions ----')
 print(mu.shape)
 print(var.shape)
-
-
 
 X_test = X_test.squeeze()
 

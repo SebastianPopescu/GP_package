@@ -155,9 +155,8 @@ ax.set_xlim(X.min() - X_MARGIN, X.max() + X_MARGIN);
 plt.savefig('./motor_dataset.png')
 plt.close()
 
-
-NUM_INDUCING = 10
-NUM_LAYERS = 2
+NUM_INDUCING = 20
+NUM_LAYERS = 1
 
 config = Config(
     num_inducing=NUM_INDUCING, inner_layer_qsqrt_factor=1e-1, 

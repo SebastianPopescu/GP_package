@@ -90,6 +90,7 @@ class HeteroskedasticDeepGP(Module):
 
         for layer in self.f_layers:
             features = layer(features, training=training)
+
         return features
     """
     def _evaluate_layer_wise_deep_gp(
@@ -118,6 +119,7 @@ class HeteroskedasticDeepGP(Module):
         Call the `likelihood_layer` on *f_outputs*, which adds the
         corresponding layer loss when training.
         """
+
         return self.likelihood_layer(f_outputs, targets=targets, training=training)
 
     def call(

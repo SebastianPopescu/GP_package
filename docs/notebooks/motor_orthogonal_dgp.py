@@ -162,7 +162,7 @@ plt.savefig('./motor_dataset.png')
 plt.close()
 
 NUM_INDUCING = 10
-NUM_LAYERS = 2
+NUM_LAYERS = 1
 
 config = Config(
     num_inducing_u=NUM_INDUCING, num_inducing_v=NUM_INDUCING, inner_layer_qsqrt_factor=1e-1, likelihood_noise_variance=1e-2, 

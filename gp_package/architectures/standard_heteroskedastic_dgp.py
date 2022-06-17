@@ -126,7 +126,7 @@ def build_constant_input_dim_het_deep_gp(X: np.ndarray, num_layers: int, config:
         is_last_layer = i_layer == num_layers - 1
         D_in = input_dim
         #NOTE -- wee need 2 because we are using a heteroskedastic likelihood
-        D_out = 2 if is_last_layer else input_dim
+        D_out = 2 if is_last_layer else config.hidden_layer_size
 
         # Pass in kernels, specify output dim (shared hyperparams/variables)
 
@@ -151,12 +151,12 @@ def build_constant_input_dim_het_deep_gp(X: np.ndarray, num_layers: int, config:
             if tf.is_tensor(X_running):
                 X_running = X_running.numpy()
             q_sqrt_scaling = config.inner_layer_qsqrt_factor
-
+ 
         layer = GPLayer(
             kernel,
             inducing_var,
             num_data,
-            num_latent_gps=config.hidden_layer_size,
+            num_latent_gps= D_out,
             mean_function=mean_function,
             name=f"gp_{i_layer}",
         )

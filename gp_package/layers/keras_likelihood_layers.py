@@ -82,7 +82,6 @@ class LikelihoodLayer(tf.keras.layers.Layer):
 
             else:
                 loss_per_datapoint = tf.constant(0.0, dtype=default_float())
-                Y_mean = Y_var = None
 
             F_mean = inputs.loc
             F_var = inputs.scale.diag ** 2
@@ -101,9 +100,13 @@ class LikelihoodLayer(tf.keras.layers.Layer):
                 loss_per_datapoint = tf.constant(0.0, dtype=default_float())
                 Y_mean = Y_var = None
 
-            F_mean = inputs.loc
-            F_var = inputs.scale.diag ** 2
+            # TODO -- this needs to be changed here
+            #NOTE -- these will actually be samples
 
+            F_samples = inputs.sample()
+
+            F_mean = tf.slice(F_samples, [0,0], [-1,1])
+            F_var =  tf.exp(tf.slice(F_samples, [0,1], [-1,1]))
 
         self.add_loss(loss_per_datapoint)
 

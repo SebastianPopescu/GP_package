@@ -122,7 +122,7 @@ def build_constant_input_dim_deep_gp(X: np.ndarray, num_layers: int, config: Con
     for i_layer in range(num_layers):
         is_last_layer = i_layer == num_layers - 1
         D_in = input_dim
-        D_out = 1 if is_last_layer else input_dim
+        D_out = 1 if is_last_layer else config.hidden_layer_size
 
         # Pass in kernels, specify output dim (shared hyperparams/variables)
 
@@ -152,7 +152,7 @@ def build_constant_input_dim_deep_gp(X: np.ndarray, num_layers: int, config: Con
             kernel,
             inducing_var,
             num_data,
-            num_latent_gps=config.hidden_layer_size,
+            num_latent_gps=D_out,
             mean_function=mean_function,
             name=f"gp_{i_layer}",
         )
