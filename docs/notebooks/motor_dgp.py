@@ -64,8 +64,6 @@ class Config:
     .. seealso:: :attr:`gpflux.layers.GPLayer.whiten`
     """
 
-
-
 class LikelihoodOutputs(tf.Module, metaclass=TensorMetaClass):
     """
     This class encapsulates the outputs of a :class:`~gpflux.layers.LikelihoodLayer`.
@@ -106,7 +104,6 @@ class LikelihoodOutputs(tf.Module, metaclass=TensorMetaClass):
     def dtype(self) -> tf.dtypes.DType:
         return self.f_mean.dtype
 
-
 def batch_predict(
     predict_callable: Callable[[np.ndarray], Tuple[np.ndarray, ...]], batch_size: int = 1000
 ) -> Callable[[np.ndarray], Tuple[np.ndarray, ...]]:
@@ -145,9 +142,11 @@ def batch_predict(
 
 
 X, Y = motorcycle_data()
+
+
 num_data, d_xim = X.shape
 
-X_MARGIN, Y_MARGIN = 0.1, 0.5
+X_MARGIN, Y_MARGIN = 0.5, 0.5
 fig, ax = plt.subplots()
 ax.scatter(X, Y, marker='x', color='k');
 ax.set_ylim(Y.min() - Y_MARGIN, Y.max() + Y_MARGIN);
@@ -156,10 +155,10 @@ plt.savefig('./motor_dataset.png')
 plt.close()
 
 NUM_INDUCING = 20
-NUM_LAYERS = 1
+NUM_LAYERS = 2
 
 config = Config(
-    num_inducing=NUM_INDUCING, inner_layer_qsqrt_factor=1e-1, 
+    num_inducing=NUM_INDUCING, inner_layer_qsqrt_factor=1e-5, 
     likelihood_noise_variance=1e-2, whiten=True, hidden_layer_size=X.shape[1]
 )
 dist_deep_gp: DistDeepGP = build_constant_input_dim_deep_gp(X, num_layers=NUM_LAYERS, config=config)
@@ -190,7 +189,7 @@ NUM_TESTING = X_test.shape[0]
 ### Multi-sample case ##
 # NOTE -- we just tile X_test NUM_SAMPLES times
 
-NUM_SAMPLES = 25
+NUM_SAMPLES = 1
 
 X_test_tiled = np.tile(X_test, (NUM_SAMPLES,1))
 out = batch_predict(model)(X_test_tiled)

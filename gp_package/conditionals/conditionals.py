@@ -62,6 +62,8 @@ def conditional_GP(
 
     return posterior.fused_predict_f(Xnew, full_cov=full_cov, full_output_cov=full_output_cov)
 
+
+
 def conditional_orthogonal_GP(
     Xnew: tf.Tensor,
     inducing_variable_u: InducingVariables,
@@ -126,7 +128,6 @@ def conditional_orthogonal_GP(
     )
 
     return posterior.fused_predict_f(Xnew, full_cov=full_cov, full_output_cov=full_output_cov)
-
 
 def conditional_heteroskedastic_orthogonal_GP(
     Xnew: tf.Tensor,

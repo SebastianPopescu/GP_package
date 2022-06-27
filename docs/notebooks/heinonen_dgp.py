@@ -21,29 +21,19 @@ from tensorflow_probability.python.util.deferred_tensor import TensorMetaClass
 from scipy.stats import norm
 import os
 
-def motorcycle_data():
-    """ Return inputs and outputs for the motorcycle dataset. We normalise the outputs. """
-    import pandas as pd
-    df = pd.read_csv("/home/sebastian.popescu/Desktop/my_code/GP_package/data/motor.csv", index_col=0)
-    X, Y = df["times"].values.reshape(-1, 1), df["accel"].values.reshape(-1, 1)
-    Y = (Y - Y.mean()) / Y.std()
-    X /= X.max()
-    return X, Y
-
-
 
 def heinonen_data():
 
     """  Create toy data in figure 4 from 'Non-Stationary Gaussian Process Regression with Hamiltonian Monte Carlo' """
-
+    np.random.seed(7)
     # x = 100*rand([40 1]);
     n = 501
     x = np.linspace(-100,200,n)
-    f1 = [5. * np.sin(-3.+0.2 * x[1:np.ceil(0.23*n)]),
-        np.sin(0.1 * x[np.ceil(0.23*n)+1:np.ceil(0.85*n)]),
-        5.*np.sin(2.8+0.2 * x[np.ceil(0.85*n)+:])]
+    f1 = [2.5 * np.sin(-3. + 0.2 * x[:int(np.ceil(0.23*n))]),
+        1. * np.sin(0.1 * x[int(np.ceil(0.23*n)):int(np.ceil(0.85*n))]),
+        2.5 * np.sin(2.8 + 0.2 * x[int(np.ceil(0.85*n)):])]
     f1 = np.concatenate(f1, axis = 0)
-    f2 = 100. * norm.pdf(x,110,20) + 100. * norm.pdf(x,-10,20)
+    f2 = 1. * norm.pdf(x,110,2) + 1. * norm.pdf(x,-10,2)
     sigma2 = 0.5
 
     x = x-np.mean(x) 
@@ -51,13 +41,14 @@ def heinonen_data():
     f1 = f1-np.mean(f1)
     f1=f1/np.std(f1)
 
-    y = f1 + np.sqrt(sigma2 * np.exp(f2)) * norm.rvs(loc=0, scale=1, size=x.shape[0], random_state=None) 
+    y = f1 + np.sqrt(sigma2 * np.exp(f2)) * norm.rvs(loc=0, scale=1, size=x.shape[0], random_state=7) 
     #yt = f1(1:2:end);
     #xt = x(1:2:end);
     #nt = size(xt,1);
     #
     # x=x(:); y=y(:); xt=xt(:);
 
+    return x.reshape(-1,1), y.reshape(-1,1)
 
 @dataclass
 class Config:
@@ -183,11 +174,11 @@ ax.set_xlim(X.min() - X_MARGIN, X.max() + X_MARGIN);
 plt.savefig('./heinonen_dataset.png')
 plt.close()
 
-NUM_INDUCING = 20
-NUM_LAYERS = 1
+NUM_INDUCING = 50
+NUM_LAYERS = 2
 
 config = Config(
-    num_inducing=NUM_INDUCING, inner_layer_qsqrt_factor=1e-1, 
+    num_inducing=NUM_INDUCING, inner_layer_qsqrt_factor=1e-5, 
     likelihood_noise_variance=1e-2, whiten=True, hidden_layer_size=X.shape[1]
 )
 dist_deep_gp: DistDeepGP = build_constant_input_dim_deep_gp(X, num_layers=NUM_LAYERS, config=config)
@@ -238,8 +229,6 @@ var = np.mean(var.reshape((NUM_SAMPLES, NUM_TESTING)), axis = 0)
 print(' ---- size of predictions ----')
 print(mu.shape)
 print(var.shape)
-
-
 
 X_test = X_test.squeeze()
 

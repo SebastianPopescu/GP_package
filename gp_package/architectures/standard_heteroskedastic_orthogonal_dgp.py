@@ -160,7 +160,7 @@ def build_constant_input_dim_het_orth_deep_gp(X: np.ndarray, num_layers: int, co
                 num_data,
                 num_latent_gps= D_out,
                 mean_function=mean_function,
-                name=f"gp_{i_layer}",
+                name=f"het_orthogonal_gp_{i_layer}",
             )
 
         else:
@@ -171,7 +171,7 @@ def build_constant_input_dim_het_orth_deep_gp(X: np.ndarray, num_layers: int, co
                 num_data,
                 num_latent_gps= D_out,
                 mean_function=mean_function,
-                name=f"gp_{i_layer}",
+                name=f"orthogonal_gp_{i_layer}",
             )
         layer.q_sqrt.assign(layer.q_sqrt * q_sqrt_scaling)
         gp_layers.append(layer)

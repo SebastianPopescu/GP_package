@@ -56,20 +56,26 @@ class LikelihoodLayer(tf.keras.layers.Layer):
 
         assert isinstance(inputs, tfp.distributions.MultivariateNormalDiag)
 
-        if isinstance(self.likelihood, Gaussian):
-            F_mean = inputs.loc
-            F_var = inputs.scale.diag ** 2
+
+
+        #if isinstance(self.likelihood, Gaussian):
+        F_mean = inputs.loc
+        F_var = inputs.scale.diag ** 2
+        
+        if training:
+            assert targets is not None
             
-            if training:
-                assert targets is not None
-                
-                loss_per_datapoint = tf.reduce_mean(
-                    -self.likelihood.variational_expectations(F_mean, F_var, targets)
-                )
-                Y_mean = Y_var = None
-            else:
-                loss_per_datapoint = tf.constant(0.0, dtype=default_float())
-                Y_mean, Y_var = self.likelihood.predict_mean_and_var(F_mean, F_var)
+            loss_per_datapoint = tf.reduce_mean(
+                -self.likelihood.variational_expectations(F_mean, F_var, targets)
+            )
+            Y_mean = Y_var = None
+        else:
+            loss_per_datapoint = tf.constant(0.0, dtype=default_float())
+            Y_mean, Y_var = self.likelihood.predict_mean_and_var(F_mean, F_var)
+
+        """
+        #NOTE -- I don't think this is necessary
+        #TODO -- should probably delete this 
 
         elif isinstance(self.likelihood, StudentT):
 
@@ -107,6 +113,8 @@ class LikelihoodLayer(tf.keras.layers.Layer):
 
             F_mean = tf.slice(F_samples, [0,0], [-1,1])
             F_var =  tf.exp(tf.slice(F_samples, [0,1], [-1,1]))
+
+        """
 
         self.add_loss(loss_per_datapoint)
 

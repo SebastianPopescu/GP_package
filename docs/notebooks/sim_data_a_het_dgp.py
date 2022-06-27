@@ -1,4 +1,4 @@
-from random import uniform
+from random import random, uniform
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
@@ -21,6 +21,9 @@ from functools import wraps
 from tensorflow_probability.python.util.deferred_tensor import TensorMetaClass
 
 import os
+from scipy.stats import norm, uniform, multivariate_normal
+
+
 
 @dataclass
 class Config:
@@ -95,7 +98,6 @@ class LikelihoodOutputs(tf.Module, metaclass=TensorMetaClass):
     def dtype(self) -> tf.dtypes.DType:
         return self.f_mean.dtype
 
-
 def batch_predict(
     predict_callable: Callable[[np.ndarray], Tuple[np.ndarray, ...]], batch_size: int = 1000
 ) -> Callable[[np.ndarray], Tuple[np.ndarray, ...]]:
@@ -120,62 +122,44 @@ def batch_predict(
             batch_predictions, nvm = predict_callable(x_batch)
             batches_f_mean.append(batch_predictions.f_mean)
             batches_f_var.append(batch_predictions.f_var)
-            #batches_y_mean.append(batch_predictions.y_mean)
-            #batches_y_var.append(batch_predictions.y_var)
+            batches_y_mean.append(batch_predictions.y_mean)
+            batches_y_var.append(batch_predictions.y_var)
 
         return LikelihoodOutputs(
             tf.concat(batches_f_mean, axis=0),
             tf.concat(batches_f_var, axis=0),
-            None,
-            None
+            tf.concat(batches_y_mean, axis=0),
+            tf.concat(batches_y_var, axis=0)
         )
 
     return wrapper
 
 ### create simulated data a from "Expectation Propagation for NOnstationary heteroscedastic gaussian process regression" by Tolvanen,2014 ###
 
-uniform_dist = tfp.distributions.Uniform(
-    low=-8.0,
-    high=8.0)
+X = uniform.rvs(loc = -8.0, scale = 16.0, size = 200, random_state = 7)
 
-X = uniform_dist.sample(200)
+f_tilda = 5.0 * np.sin(X)
 
-f_tilda = tf.math.sin(X)
+first_prob = norm.pdf(
+    x = X, loc = -2.5, scale = 1.)
 
-first_normal = tfp.distributions.Normal(
-    loc = -2.5,
-    scale = 1.)
-first_prob = first_normal.prob(
-    value = X)
-
-second_normal = tfp.distributions.Normal(
-    loc = 2.5,
-    scale = 1.) 
-second_prob = second_normal.prob(
-    value = X)
-
+second_prob = norm.pdf(
+    x = X, loc = 2.5, scale = 1.)
 f_sigma = first_prob + second_prob
 
-third_normal = tfp.distributions.Normal(
-    loc = 0.0,
-    scale = 0.25)
-third_prob = third_normal.prob(
-    value = X)
+third_prob = norm.pdf(
+    x = X, loc = -8., scale = 3.0)
+fourth_prob = norm.pdf(
+    x = X, loc = 8., scale = 3.0)
 
-sigma = 0.08 + third_prob 
-sigma_np = sigma.numpy()
-print(sigma_np)
+sigma = 0.02 + third_prob #+ fourth_prob
 
-noise = np.random.normal(loc = np.zeros_like(sigma_np), scale = np.sqrt(sigma))
-print(noise)
-
-#epsi = tfp.distributions.MultivariateNormalDiag(loc = tf.zeros_like(sigma), scale_diag = tf.sqrt(sigma))
-#sampled_epsi = epsi.sample()
+noise = multivariate_normal.rvs(mean = np.zeros_like(sigma), cov = np.diag(sigma), size = 1, random_state=7)
 
 Y = f_sigma * f_tilda + noise
 
-X = X.numpy().reshape((-1,1))
-Y = Y.numpy().reshape((-1,1))
+X = X.reshape((-1,1))
+Y = Y.reshape((-1,1))
 
 
 num_data, d_xim = X.shape
@@ -189,10 +173,10 @@ plt.savefig('./sim_data_a_dataset.png')
 plt.close()
 
 NUM_INDUCING = 20
-NUM_LAYERS = 1
+NUM_LAYERS = 2
 
 config = Config(
-    num_inducing=NUM_INDUCING, inner_layer_qsqrt_factor=1e-1, 
+    num_inducing=NUM_INDUCING, inner_layer_qsqrt_factor=1e-5, 
     likelihood_noise_variance=1e-2, whiten=True, hidden_layer_size=X.shape[1]
 )
 deep_gp: DeepGP = build_constant_input_dim_het_deep_gp(X, num_layers=NUM_LAYERS, config=config)
@@ -200,7 +184,7 @@ deep_gp: DeepGP = build_constant_input_dim_het_deep_gp(X, num_layers=NUM_LAYERS,
 model = deep_gp.as_training_model()
 model.compile(tf.optimizers.Adam(1e-2))
 
-history = model.fit({"inputs": X, "targets": Y}, epochs=int(5e3), verbose=1)
+history = model.fit({"inputs": X, "targets": Y}, epochs=int(500), verbose=1)
 
 cmd = 'mkdir -p ./figures'
 os.system(cmd)
@@ -223,15 +207,15 @@ NUM_TESTING = X_test.shape[0]
 ### Multi-sample case ##
 # NOTE -- we just tile X_test NUM_SAMPLES times
 
-NUM_SAMPLES = 100
+NUM_SAMPLES = 25
 
 X_test_tiled = np.tile(X_test, (NUM_SAMPLES,1))
 out = batch_predict(model)(X_test_tiled)
 
 print(out)
 
-mu = out.f_mean.numpy().squeeze()
-var = out.f_var.numpy().squeeze()
+mu = out.y_mean.numpy().squeeze()
+var = out.y_var.numpy().squeeze()
 
 print(' ---- size of predictions ----')
 print(mu.shape)

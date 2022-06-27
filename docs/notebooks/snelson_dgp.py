@@ -4,14 +4,22 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import tensorflow_probability as tfp
 from sklearn.neighbors import KernelDensity
+
+from gp_package.base import TensorType
 tf.keras.backend.set_floatx("float64")
-import os
+
+from dataclasses import dataclass
 
 from gp_package.models import *
 from gp_package.layers import *
 from gp_package.kernels import *
 from gp_package.inducing_variables import *
-from gp_package.architectures import Config, build_constant_input_dim_deep_gp
+from gp_package.architectures import build_constant_input_dim_deep_gp
+from typing import Callable, Tuple, Optional
+from functools import wraps
+from tensorflow_probability.python.util.deferred_tensor import TensorMetaClass
+
+import os
 
 
 class ToyData1D(object):
@@ -51,6 +59,8 @@ def load_snelson_data(n=100, dtype=np.float64):
             return np.array([float(i) for i in f.read().strip().split("\n")],
                             dtype=dtype)
 
+    np.random.seed(7)
+
     train_x = _load_snelson("train_inputs")
     train_y = _load_snelson("train_outputs")
     test_x = _load_snelson("test_inputs")
@@ -60,87 +70,203 @@ def load_snelson_data(n=100, dtype=np.float64):
     return ToyData1D(train_x, train_y, test_x=test_x)
 
 
-if __name__=="__main__":
 
-    toy = load_snelson_data(n=100)
-    X, Y = toy.train_x, toy.train_y
-    test_x = toy.test_x
-
-    num_data, d_xim = X.shape
-
-    X_MARGIN, Y_MARGIN = 0.1, 0.5
-    fig, ax = plt.subplots()
-    ax.scatter(X, Y, marker='x', color='k');
-    ax.set_ylim(Y.min() - Y_MARGIN, Y.max() + Y_MARGIN);
-    ax.set_xlim(X.min() - X_MARGIN, X.max() + X_MARGIN);
-    plt.savefig('./simple_dataset.png')
-    plt.close()
-
-
+@dataclass
+class Config:
     """
-    NUM_INDUCING = 20
-
-    kernel = SquaredExponential()
-    inducing_variable = InducingPoints(
-        np.linspace(X.min(), X.max(), NUM_INDUCING).reshape(-1, 1)
-    )
-
-    NUM_LAYERS = 2
-    gp_layers = []
-
-    for l in range(NUM_LAYERS):
-        gp_layers.append(GPLayer(
-        kernel, inducing_variable, num_data=num_data, num_latent_gps=1, name = f'layer_{l}'))
-
-
-    likelihood_layer = LikelihoodLayer(Gaussian(0.1))
-
-    single_layer_dgp = DeepGP(gp_layers, likelihood_layer, num_data=X.shape[0])
+    The configuration used by :func:`build_constant_input_dim_orthogonal_deep_gp`.
     """
 
-    NUM_INDUCING = 10
-    NUM_LAYERS = 2
+    num_inducing: int
+    """
+    The number of inducing variables, *M*. The Deep GP uses the same number
+    of inducing variables in each layer.
+    """
 
-    config = Config(
-        num_inducing=NUM_INDUCING, inner_layer_qsqrt_factor=1e-1, likelihood_noise_variance=1e-2, 
-        whiten=True, hidden_layer_size=X.shape[1]
-    )
-    deep_gp: DeepGP = build_constant_input_dim_deep_gp(X, num_layers=NUM_LAYERS, config=config)
+    inner_layer_qsqrt_factor: float
+    """
+    A multiplicative factor used to rescale the hidden layers'
+    :attr:`~gpflux.layers.GPLayer.q_sqrt`. Typically this value is chosen to be small
+    (e.g., 1e-5) to reduce noise at the start of training.
+    """
 
-    model = deep_gp.as_training_model()
-    model.compile(tf.optimizers.Adam(1e-2))
+    likelihood_noise_variance: float
+    """
+    The variance of the :class:`~gpflow.likelihoods.Gaussian` likelihood that is used
+    by the Deep GP.
+    """
+    hidden_layer_size : int
 
-    history = model.fit({"inputs": X, "targets": Y}, epochs=int(1), verbose=1)
-    fig, ax = plt.subplots()
-    ax.plot(history.history["loss"])
-    ax.set_xlabel('Epoch')
-    ax.set_ylabel('Loss')
-    plt.savefig('./snelson_dataset_loss_dgp.png')
-    plt.close()
+    whiten: bool = True
+    """
+    Determines the parameterisation of the inducing variables.
+    If `True`, :math:``p(u) = N(0, I)``, otherwise :math:``p(u) = N(0, K_{uu})``.
+    .. seealso:: :attr:`gpflux.layers.GPLayer.whiten`
+    """
 
-    fig, ax = plt.subplots()
-    num_data_test = 200
-    X_test = np.linspace(X.min() - X_MARGIN, X.max() + X_MARGIN, num_data_test).reshape(-1, 1)
-    model = deep_gp.as_prediction_model()
-    out = model(X_test)
+class LikelihoodOutputs(tf.Module, metaclass=TensorMetaClass):
+    """
+    This class encapsulates the outputs of a :class:`~gpflux.layers.LikelihoodLayer`.
 
-    mu = out.y_mean.numpy().squeeze()
-    var = out.y_var.numpy().squeeze()
-    X_test = X_test.squeeze()
+    It contains the mean and variance of the marginal distribution of the final latent
+    :class:`~gpflux.layers.GPLayer`, as well as the mean and variance of the likelihood.
 
-    for i in [1, 2]:
-        lower = mu - i * np.sqrt(var)
-        upper = mu + i * np.sqrt(var)
-        ax.fill_between(X_test, lower, upper, color="C1", alpha=0.3)
+    This class includes the `TensorMetaClass
+    <https://github.com/tensorflow/probability/blob/master/tensorflow_probability/python/util/deferred_tensor.py#L81>`_
+    to make objects behave as a `tf.Tensor`. This is necessary so that it can be
+    returned from the `tfp.layers.DistributionLambda` Keras layer.
+    """
 
-    ax.set_ylim(Y.min() - Y_MARGIN, Y.max() + Y_MARGIN)
-    ax.set_xlim(X.min() - X_MARGIN, X.max() + X_MARGIN)
-    ax.plot(X, Y, "kx", alpha=0.5)
-    ax.plot(X_test, mu, "C1")
-    ax.set_xlabel('time')
-    ax.set_ylabel('acc')
-    plt.savefig('./snelson_dataset_dgp.png')
-    plt.close()
+    def __init__(
+        self,
+        f_mean: TensorType,
+        f_var: TensorType,
+        y_mean: Optional[TensorType],
+        y_var: Optional[TensorType],
+    ):
+        super().__init__(name="likelihood_outputs")
+
+        self.f_mean = f_mean
+        self.f_var = f_var
+        self.y_mean = y_mean
+        self.y_var = y_var
+
+    def _value(
+        self, dtype: tf.dtypes.DType = None, name: str = None, as_ref: bool = False
+    ) -> tf.Tensor:
+        return self.f_mean
+
+    @property
+    def shape(self) -> tf.Tensor:
+        return self.f_mean.shape
+
+    @property
+    def dtype(self) -> tf.dtypes.DType:
+        return self.f_mean.dtype
+
+def batch_predict(
+    predict_callable: Callable[[np.ndarray], Tuple[np.ndarray, ...]], batch_size: int = 1000
+) -> Callable[[np.ndarray], Tuple[np.ndarray, ...]]:
+    """
+    Simple wrapper that transform a full dataset predict into batch predict.
+    :param predict_callable: desired predict function that we want to wrap so it's executed in
+     batch fashion.
+    :param batch_size: how many predictions to do within single batch.
+    """
+    if batch_size <= 0:
+        raise ValueError(f"Batch size has to be positive integer!")
+
+    @wraps(predict_callable)
+    def wrapper(x: np.ndarray) -> Tuple[np.ndarray, ...]:
+        batches_f_mean = []
+        batches_f_var = []
+        batches_y_mean = []
+        batches_y_var = []
+        for x_batch in tf.data.Dataset.from_tensor_slices(x).batch(
+            batch_size=batch_size, drop_remainder=False
+        ):
+            batch_predictions, nvm = predict_callable(x_batch)
+            batches_f_mean.append(batch_predictions.f_mean)
+            batches_f_var.append(batch_predictions.f_var)
+            batches_y_mean.append(batch_predictions.y_mean)
+            batches_y_var.append(batch_predictions.y_var)
+
+        return LikelihoodOutputs(
+            tf.concat(batches_f_mean, axis=0),
+            tf.concat(batches_f_var, axis=0),
+            tf.concat(batches_y_mean, axis=0),
+            tf.concat(batches_y_var, axis=0)
+        )
+
+    return wrapper
+
+
+toy = load_snelson_data(n=100)
+X, Y = toy.train_x, toy.train_y
+test_x = toy.test_x
+
+num_data, d_xim = X.shape
+
+X_MARGIN, Y_MARGIN = 2.0, 0.5
+fig, ax = plt.subplots()
+ax.scatter(X, Y, marker='x', color='k');
+ax.set_ylim(Y.min() - Y_MARGIN, Y.max() + Y_MARGIN);
+ax.set_xlim(X.min() - X_MARGIN, X.max() + X_MARGIN);
+plt.savefig('./snelson_dataset.png')
+plt.close()
+
+NUM_INDUCING = 25
+NUM_LAYERS = 2
+
+config = Config(
+    num_inducing=NUM_INDUCING, inner_layer_qsqrt_factor=1e-5, 
+    likelihood_noise_variance=1e-2, whiten=True, hidden_layer_size=X.shape[1]
+)
+dist_deep_gp: DistDeepGP = build_constant_input_dim_deep_gp(X, num_layers=NUM_LAYERS, config=config)
+
+model = dist_deep_gp.as_training_model()
+model.compile(tf.optimizers.Adam(1e-2))
+
+history = model.fit({"inputs": X, "targets": Y}, epochs=int(200), verbose=1)
+
+cmd = 'mkdir -p ./figures'
+os.system(cmd)
+
+fig, ax = plt.subplots()
+ax.plot(history.history["loss"])
+ax.set_xlabel('Epoch')
+ax.set_ylabel('Loss')
+plt.savefig(f"./figures/snelson_dataset_loss_dgp_num_layers_{NUM_LAYERS}_num_inducing_{NUM_INDUCING}.png")
+plt.close()
+
+fig, ax = plt.subplots()
+num_data_test = 200
+X_test = np.linspace(X.min() - X_MARGIN, X.max() + X_MARGIN, num_data_test).reshape(-1, 1)
+model = dist_deep_gp.as_prediction_model()
+#out = model(X_test)
+#out = model(X_test)
+NUM_TESTING = X_test.shape[0]
+
+### Multi-sample case ##
+# NOTE -- we just tile X_test NUM_SAMPLES times
+
+NUM_SAMPLES = 25
+
+X_test_tiled = np.tile(X_test, (NUM_SAMPLES,1))
+out = batch_predict(model)(X_test_tiled)
+
+print(out)
+
+mu = out.y_mean.numpy().squeeze()
+var = out.y_var.numpy().squeeze()
+
+print(' ---- size of predictions ----')
+print(mu.shape)
+print(var.shape)
+
+mu = np.mean(mu.reshape((NUM_SAMPLES, NUM_TESTING)), axis = 0)
+var = np.mean(var.reshape((NUM_SAMPLES, NUM_TESTING)), axis = 0)
+
+print(' ---- size of predictions ----')
+print(mu.shape)
+print(var.shape)
+
+X_test = X_test.squeeze()
+
+for i in [1, 2]:
+    lower = mu - i * np.sqrt(var)
+    upper = mu + i * np.sqrt(var)
+    ax.fill_between(X_test, lower, upper, color="C1", alpha=0.3)
+
+ax.set_ylim(Y.min() - Y_MARGIN, Y.max() + Y_MARGIN)
+ax.set_xlim(X.min() - X_MARGIN, X.max() + X_MARGIN)
+ax.plot(X, Y, "kx", alpha=0.5)
+ax.plot(X_test, mu, "C1")
+ax.set_xlabel('time')
+ax.set_ylabel('acc')
+plt.savefig(f"./figures/snelson_dataset_dgp_num_layers_{NUM_LAYERS}_num_inducing_{NUM_INDUCING}.png")
+plt.close()
+
 
 
 

@@ -6,6 +6,8 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
+from gp_package.conditionals.conditionals import conditional_heteroskedastic_orthogonal_GP
+
 from ..base import Parameter, TensorType
 from ..config import default_float
 
@@ -27,7 +29,6 @@ class GPLayer(tfp.layers.DistributionLambda):
     A sparse variational multioutput GP layer. This layer holds the kernel,
     inducing variables and variational distribution, and mean function.
     """
-
     num_data: int
     whiten: bool
     num_samples: Optional[int]
@@ -196,9 +197,7 @@ class GPLayer(tfp.layers.DistributionLambda):
         This method also adds a layer-specific loss function, given by the KL divergence between
         this layer and the GP prior (scaled to per-datapoint).
         """
-
-
-
+        
         # I think this is getting just the samples from the distribution 
         outputs = super().call(inputs, *args, **kwargs)
 
@@ -816,7 +815,7 @@ class Heteroskedastic_Orthogonal_GPLayer(tfp.layers.DistributionLambda):
         mean_function = self.mean_function(inputs)
 
         #TODO -- thiis needs to be changed 
-        mean_cond, cov = conditional_orthogonal_GP(
+        mean_cond, cov = conditional_heteroskedastic_orthogonal_GP(
             inputs,
             self.inducing_variable_u,
             self.inducing_variable_v,
