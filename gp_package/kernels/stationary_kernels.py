@@ -12,19 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import abc
 from typing import Any, Optional
 
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from ..base import Parameter, TensorType
+from ..base import Parameter, TensorData, TensorType
 from ..utils import positive
 from ..utils.ops import difference_matrix, square_distance, wasserstein_2_distance
-from .base_kernel import ActiveDims, Kernel
+from .base_kernel import DistributionalKernel
 
-
-class Stationary(Kernel):
+class Stationary(DistributionalKernel):
     """
     Base class for kernels that are stationary, that is, they only depend on
 
@@ -45,18 +45,16 @@ class Stationary(Kernel):
             an array the same length as the the number of active dimensions
             e.g. [1., 1., 1.]. If only a single value is passed, this value
             is used as the lengthscale of each dimension.
-        :param kwargs: accepts `name` and `active_dims`, which is a list or
-            slice of indices which controls which columns of X are used (by
-            default, all columns are used).
+        :param kwargs: accepts `name`
         """
         for kwarg in kwargs:
-            if kwarg not in {"name", "active_dims"}:
+            if kwarg not in {"name"}:
                 raise TypeError(f"Unknown keyword argument: {kwarg}")
 
         super().__init__(**kwargs)
         self.variance = Parameter(variance, transform=positive())
         self.lengthscales = Parameter(lengthscales, transform=positive())
-        self._validate_ard_active_dims(self.lengthscales)
+        
 
     @property
     def ard(self) -> bool:
@@ -90,11 +88,14 @@ class IsotropicStationary(Stationary):
         Euclidean distance. Should operate element-wise on r.
     """
 
-    # Only used for SquaredExponential
-    def K(self, X: TensorType, X2: Optional[TensorType] = None) -> tf.Tensor:
-        
-        r2 = self.scaled_squared_euclid_dist(X, X2)
-        return self.K_r2(r2)
+    @abc.abstractmethod
+    def K(self, X: TensorType, 
+        X_moments: tfp.distributions.MultivariateNormalDiag,
+        X2: TensorType = None, 
+        X2_moments: Optional[tfp.distributions.MultivariateNormalDiag] = None) -> tf.Tensor:
+    
+        raise NotImplementedError
+
 
     def K_r2(self, r2: TensorType) -> tf.Tensor:
         if hasattr(self, "K_r"):
@@ -178,8 +179,6 @@ class Matern52(IsotropicStationary):
         return self.variance * (1.0 + sqrt5 * r + 5.0 / 3.0 * tf.square(r)) * tf.exp(-sqrt5 * r)
 
 
-
-
 class Hybrid(IsotropicStationary):
 
     """
@@ -194,46 +193,31 @@ class Hybrid(IsotropicStationary):
     σ²  is the variance parameter
 
     Functions drawn from a GP with this kernel are infinitely differentiable! 
-    TODO -- this remains to be seen as this also implies a discussion around
+    NOTE -- this remains to be seen as this also implies a discussion around
     Wasserstein Gradient Flows 
     """
-
 
     def __init__(
         self, baseline_kernel, **kwargs: Any
     ) -> None:
         """
         :param baseline_kernel: string specifying the underlying kernel to be used withing the Hybrid kernel framework
-        :param kwargs: accepts `name` and `active_dims`, which is a list or
-            slice of indices which controls which columns of X are used (by
-            default, all columns are used).
+        :param kwargs: accepts `name` 
         """
         super().__init__(**kwargs)
 
         self.baseline_kernel = baseline_kernel
 
     # Overides default K from IsotropicStationary base class
-    def K(self, X: tfp.distributions.MultivariateNormalDiag, X2: Optional[tfp.distributions.MultivariateNormalDiag] = None, *, 
-        seed : Optional[Any] = None) -> tf.Tensor:
+    def K(self, X: TensorType, 
+        X_moments: tfp.distributions.MultivariateNormalDiag,
+        X2: TensorType = None, 
+        X2_moments: Optional[tfp.distributions.MultivariateNormalDiag] = None) -> tf.Tensor:
 
-        print('---- inside K -----')
-        print('X :', X)
-        print('X2 :', X2)
+        w2 = self.scaled_squared_Wasserstein_2_dist(X_moments, X2_moments)
+        r2 = self.scaled_squared_euclid_dist(X, X2)
 
-        w2 = self.scaled_squared_Wasserstein_2_dist(X, X2)
-
-        tf.random.set_seed(seed)
-        X_sampled = X.sample(seed = seed)
-        print('inside K we have X_sampled:', X_sampled)
-        if X2 is not None:
-            assert isinstance(X2, tfp.distributions.MultivariateNormalDiag)
-            X2_sampled = X2.sample()
-            print('inside K we have X2_sampled:', X2_sampled)
-        else:
-            X2_sampled = None
-
-        r2 = self.scaled_squared_euclid_dist(X_sampled, X2_sampled)
-
+        #TODO -- see if we can do this in a more elegant way, possibily via Dispatcher
         if self.baseline_kernel == 'squared_exponential':
 
             return self.K_r2(r2, w2)
@@ -247,11 +231,10 @@ class Hybrid(IsotropicStationary):
 
         elif self.baseline_kernel == 'matern32':
 
-
             r = tf.sqrt(tf.maximum(r2, 1e-36))
             w = tf.sqrt(tf.maximum(w2, 1e-36))
-
             sqrt3 = np.sqrt(3.0)
+
             return self.variance * (1.0 + sqrt3 * r) * tf.exp(-sqrt3 * r) * (1.0 + sqrt3 * w) * tf.exp(-sqrt3 * w)
 
 
@@ -259,17 +242,9 @@ class Hybrid(IsotropicStationary):
 
             r = tf.sqrt(tf.maximum(r2, 1e-36))
             w = tf.sqrt(tf.maximum(w2, 1e-36))
-
             sqrt5 = np.sqrt(5.0)
+
             return self.variance * (1.0 + sqrt5 * r + 5.0 / 3.0 * tf.square(r)) * tf.exp(-sqrt5 * r) * (1.0 + sqrt5 * w + 5.0 / 3.0 * tf.square(w)) * tf.exp(-sqrt5 * w)
-
-
-
-    # Overides default K_diag from Stationary base class 
-    def K_diag(self, X: tfp.distributions.MultivariateNormalDiag) -> tf.Tensor:
-
-        X_sampled = X.sample()
-        return tf.fill(tf.shape(X_sampled)[:-1], tf.squeeze(self.variance))
 
 
     def K_r2(self, r2: TensorType, w2: TensorType) -> tf.Tensor:

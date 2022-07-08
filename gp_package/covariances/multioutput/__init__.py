@@ -1,7 +1,6 @@
-from .kuus import Kuus 
-from .kufs import Kufs
+from . import kufs, kuus
 
 __all__ = [
-    "Kuus",
-    "Kufs"
+    "kufs",
+    "kuus",
 ]

@@ -111,7 +111,7 @@ fig, ax = plt.subplots()
 ax.scatter(X, Y, marker='x', color='k');
 ax.set_ylim(Y.min() - Y_MARGIN, Y.max() + Y_MARGIN);
 ax.set_xlim(X.min() - X_MARGIN, X.max() + X_MARGIN);
-plt.savefig('./simple_dataset.png')
+plt.savefig('./motor_dataset.png')
 plt.close()
 
 

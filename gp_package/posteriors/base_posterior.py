@@ -6,26 +6,42 @@ from typing import Optional, Tuple, Type, Union
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from gp_package.inducing_variables.distributional_inducing_variables import DistributionalInducingVariables
-from gp_package.inducing_variables.multioutput.distributional_inducing_variables import SharedIndependentDistributionalInducingVariables
-
-from ..base import MeanAndVariance, Module, Parameter, RegressionData, TensorType
-from ..conditionals.utils_conditionals import *
-from ..config import default_float, default_jitter
-from ..covariances import Kuf, Kuu, Kuus, Kufs
-from ..inducing_variables import (
+from .. import covariances, kernels, mean_functions
+from gpflow.base import MeanAndVariance, Module, Parameter, RegressionData, TensorType
+from gpflow.conditionals.util import (
+    base_conditional,
+    base_conditional_with_lm,
+    expand_independent_outputs,
+    fully_correlated_conditional,
+    independent_interdomain_conditional,
+    mix_latent_gp,
+    separate_independent_conditional_implementation,
+)
+from gpflow.config import default_float, default_jitter
+from ..covariances import Kuf, Kuu #NOTE -- getting the dispatches essentially
+from gpflow.inducing_variables import (
+    FallbackSeparateIndependentInducingVariables,
+    FallbackSharedIndependentInducingVariables,
     InducingPoints,
     InducingVariables,
+    SeparateIndependentInducingVariables,
     SharedIndependentInducingVariables,
 )
-from ..kernels import *
-from ..mean_functions import MeanFunction
-import numpy as np
+from ..inducing_variables import (
+    DistributionalInducingVariables
+)
+from ..kernels import DistributionalKernel
+
+from gpflow.kernels import Kernel
+from gpflow.mean_functions import MeanFunction
+from gpflow.utilities import Dispatcher, add_noise_cov
+from gpflow.utilities.ops import eye, leading_transpose
+
 
 class AbstractPosterior(Module, ABC):
     def __init__(
         self,
-        kernel: Kernel,
+        kernel: Union[Kernel, DistributionalKernel],
         X_data: Union[tf.Tensor, InducingVariables, DistributionalInducingVariables],
         cache: Optional[Tuple[tf.Tensor, ...]] = None,
         mean_function: Optional[MeanFunction] = None,
@@ -51,20 +67,44 @@ class AbstractPosterior(Module, ABC):
             return mean + self.mean_function(Xnew)
 
     def fused_predict_f(
-        self, Xnew: Union[TensorType,tfp.distributions.MultivariateNormalDiag], full_cov: bool = False, full_output_cov: bool = False
+        self, Xnew: TensorType, *, full_cov: bool = False, full_output_cov: bool = False,
+        detailed_moments: bool = False
     ) -> MeanAndVariance:
         """
         Computes predictive mean and (co)variance at Xnew, including mean_function
         Does not make use of caching
         """
-        mean, cov = self._conditional_fused(
-            Xnew, full_cov=full_cov, full_output_cov=full_output_cov
+        mean, cov = self._conditional_fused_SVGP(
+            Xnew, full_cov=full_cov, full_output_cov=full_output_cov, detailed_moments = detailed_moments
+        )
+        return self._add_mean_function(Xnew, mean), cov
+
+    def fused_predict_f_distributional(
+        self, Xnew: TensorType, Xnew_moments: tfp.distributions.MultivariateNormalDiag, *, full_cov: bool = False, full_output_cov: bool = False,
+        detailed_moments: bool = False
+    ) -> MeanAndVariance:
+        """
+        Computes predictive mean and (co)variance at Xnew, including mean_function
+        Does not make use of caching
+        """
+        mean, cov = self._conditional_fused_distributional_SVGP(
+            Xnew, Xnew_moments, full_cov=full_cov, full_output_cov=full_output_cov, detailed_moments = detailed_moments
         )
         return self._add_mean_function(Xnew, mean), cov
 
     @abstractmethod
-    def _conditional_fused(
-        self, Xnew: Union[TensorType,tfp.distributions.MultivariateNormalDiag], full_cov: bool = False, full_output_cov: bool = False
+    def _conditional_fused_SVGP(
+        self, Xnew: TensorType, *, full_cov: bool = False, full_output_cov: bool = False, detailed_moments: bool = False
+    ) -> MeanAndVariance:
+        """
+        Computes predictive mean and (co)variance at Xnew, *excluding* mean_function
+        Does not make use of caching
+        """
+
+    @abstractmethod
+    def _conditional_fused_distributional_SVGP(
+        self, Xnew: TensorType, Xnew_moments: tfp.distributions.MultivariateNormalDiag, full_cov: bool = False, full_output_cov: bool = False, 
+        detailed_moments: bool = False
     ) -> MeanAndVariance:
         """
         Computes predictive mean and (co)variance at Xnew, *excluding* mean_function
@@ -119,13 +159,13 @@ class IndependentPosterior(BasePosterior):
 
         # TODO: this assumes that Xnew has shape [N, D] and no leading dims
 
-        if isinstance(self.kernel, SeparateIndependent):
+        if isinstance(self.kernel, kernels.SeparateIndependent):
             # NOTE calling kernel(Xnew, full_cov=full_cov, full_output_cov=False) directly would
             # return
             # if full_cov: [P, N, N] -- this is what we want
             # else: [N, P] instead of [P, N] as we get from the explicit stack below
             Kff = tf.stack([k(Xnew, full_cov=full_cov) for k in self.kernel.kernels], axis=0)
-        elif isinstance(self.kernel, MultioutputKernel):
+        elif isinstance(self.kernel, kernels.MultioutputKernel):
             # effectively, SharedIndependent path
             Kff = self.kernel.kernel(Xnew, full_cov=full_cov)
             # NOTE calling kernel(Xnew, full_cov=full_cov, full_output_cov=False) directly would
@@ -138,62 +178,5 @@ class IndependentPosterior(BasePosterior):
 
         return Kff
 
-class IndependentPosteriorSingleOutput(IndependentPosterior):
-    
-    # could almost be the same as IndependentPosteriorMultiOutput ...
-    def _conditional_fused(
-        self, Xnew: Union[TensorType,tfp.distributions.MultivariateNormalDiag], full_cov: bool = False, full_output_cov: bool = False
-    ) -> MeanAndVariance:
-        # same as IndependentPosteriorMultiOutput, Shared~/Shared~ branch, except for following
-        # line:
-        Knn = self.kernel(Xnew, full_cov=full_cov)
-
-        Kmm = Kuu(self.X_data, self.kernel, jitter=default_jitter())  # [M, M]
-        Kmn = Kuf(self.X_data, self.kernel, Xnew)  # [M, N]
-
-        fmean, fvar = base_conditional(
-            Kmn, Kmm, Knn, self.q_mu, full_cov=full_cov, q_sqrt=self.q_sqrt, white=self.whiten
-        )  # [N, P],  [P, N, N] or [N, P]
-        return self._post_process_mean_and_cov(fmean, fvar, full_cov, full_output_cov)
-
-class IndependentPosteriorMultiOutput(IndependentPosterior):
-    def _conditional_fused(
-        self, Xnew: Union[TensorType,tfp.distributions.MultivariateNormalDiag], full_cov: bool = False, full_output_cov: bool = False
-    ) -> MeanAndVariance:
-        
-        if isinstance(self.X_data, SharedIndependentInducingVariables) and isinstance(
-            self.kernel, SharedIndependent):
-            # same as IndependentPosteriorSingleOutput except for following line
-
-            Knn = self.kernel.kernel(Xnew, full_cov=full_cov)
-            # we don't call self.kernel() directly as that would do unnecessary tiling
-
-            Kmm = Kuus(self.X_data, self.kernel, jitter=default_jitter())  # [M, M]
-            Kmn = Kufs(self.X_data, self.kernel, Xnew)  # [M, N]
-
-            fmean, fvar = base_conditional(
-                Kmn, Kmm, Knn, self.q_mu, full_cov=full_cov, q_sqrt=self.q_sqrt, white=self.whiten
-            )  # [N, P],  [P, N, N] or [N, P]
-        elif isinstance(self.X_data, SharedIndependentDistributionalInducingVariables) and isinstance(
-            self.kernel, SharedIndependent):
-            # same as IndependentPosteriorSingleOutput except for following line
-            Knn = self.kernel.kernel(Xnew, full_cov=full_cov)
-            # we don't call self.kernel() directly as that would do unnecessary tiling
-
-            lcl_seed = np.random.randint(1e5)
-            tf.random.set_seed(lcl_seed)
-
-            Kmm = Kuus(self.X_data, self.kernel, jitter=default_jitter(), seed = lcl_seed)  # [M, M]
-            Kmn = Kufs(self.X_data, self.kernel, Xnew, seed  = lcl_seed)  # [M, N]
-            
-            fmean, fvar = base_conditional(
-                Kmn, Kmm, Knn, self.q_mu, full_cov=full_cov, q_sqrt=self.q_sqrt, white=self.whiten
-            )  # [N, P],  [P, N, N] or [N, P]
-        
-        
-        else:
-            raise NotImplementedError
-
-        return self._post_process_mean_and_cov(fmean, fvar, full_cov, full_output_cov)
 
 

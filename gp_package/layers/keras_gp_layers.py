@@ -200,7 +200,6 @@ class GPLayer(tfp.layers.DistributionLambda):
         # I think this is getting just the samples from the distribution 
         outputs = super().call(inputs, *args, **kwargs)
 
-
         if kwargs.get("training"):
             #log_prior = tf.add_n([p.log_prior_density() for p in self.kernel.trainable_parameters])
             loss = self.standard_kl() #- log_prior

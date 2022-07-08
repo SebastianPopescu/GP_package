@@ -1,13 +1,12 @@
-from .stationary_kernels import SquaredExponential, Kernel, Stationary, Hybrid, Matern32
-from .multioutput import MultioutputKernel, SharedIndependent, SeparateIndependent
+from .base_kernel import DistributionalKernel
+from .stationary_kernels import Hybrid
+
+from .multioutput import DistributionalSharedIndependent, DistributionalMultioutputKernel
+
 
 __all__ =[
-    "SquaredExponential", 
-    "Kernel", 
-    "MultioutputKernel", 
-    "SharedIndependent", 
-    "SeparateIndependent",
-    "Stationary",
+    "DistributionalKernel", 
     "Hybrid",
-    "Matern32"
+    "DistributionalSharedIndependent",
+    "DistributionalMultioutputKernel"
 ]

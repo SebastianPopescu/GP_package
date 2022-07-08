@@ -1,5 +1,6 @@
-from .kernels import MultioutputKernel, SharedIndependent, SeparateIndependent
+from .kernels import DistributionalSharedIndependent, DistributionalMultioutputKernel
 
 __all__ = [
-    "MultioutputKernel", "SharedIndependent", "SeparateIndependent"   
+    "DistributionalSharedIndependent",   
+    "DistributionalMultioutputKernel"
 ]

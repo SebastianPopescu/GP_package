@@ -1,6 +1,10 @@
-from .base_posterior import IndependentPosteriorSingleOutput, IndependentPosteriorMultiOutput
+from .gpflow_posterior import IndependentPosteriorMultiOutput
+from .base_posterior import BasePosterior
+from .get_posterior_class import get_posterior_class
+
 
 __all__ = [
-    "IndependentPosteriorSingleOutput",
-    "IndependentPosteriorMultiOutput"
+    "BasePosterior",
+    "get_posterior_class",
+    "IndependentPosteriorMultiOutput",
 ]

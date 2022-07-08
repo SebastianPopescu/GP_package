@@ -1,31 +1,42 @@
 import tensorflow as tf
 
-from typing import Any, Union, Optional
 
-from gp_package.covariances.kuu import Kuu
+from typing import Union
+from gpflow.inducing_variables import FallbackSharedIndependentInducingVariables
 
-from ...config import default_float
-from ...inducing_variables import FallbackSharedIndependentInducingVariables, FallbackSharedIndependentDistributionalInducingVariables
-from ...kernels import SharedIndependent
+from gp_package.base import TensorLike
 
-def Kuus(
-    inducing_variable: Union[FallbackSharedIndependentInducingVariables,FallbackSharedIndependentDistributionalInducingVariables],
+
+from ...inducing_variables import (
+    FallbackSharedIndependentDistributionalInducingVariables,
+)
+from gpflow.kernels import (
+    SharedIndependent,
+)
+from ..dispatch import Kuu
+
+
+@Kuu.register(FallbackSharedIndependentInducingVariables, SharedIndependent)
+def Kuu_shared_shared(
+    inducing_variable: FallbackSharedIndependentInducingVariables,
     kernel: SharedIndependent,
     *,
     jitter: float = 0.0,
-    seed : Optional[Any] = None
 ) -> tf.Tensor:
-
-
-    """
-    Warning -- this currently works just with shared variables, hence a single kernel and associated hyperparameters per layer
-    """
-    
-    Kmm = Kuu(inducing_variable.inducing_variable, kernel.kernel, seed = seed)  # [M, M]
+    Kmm = Kuu(inducing_variable.inducing_variable, kernel.kernel)  # [M, M]
     jittermat = tf.eye(inducing_variable.num_inducing, dtype=Kmm.dtype) * jitter
     return Kmm + jittermat
 
+@Kuu.register(FallbackSharedIndependentDistributionalInducingVariables, object, SharedIndependent)
+def Kuu_distributional_shared_shared(
+    inducing_variable: FallbackSharedIndependentDistributionalInducingVariables,
+    sampled_inducing_points: TensorLike,
+    kernel: SharedIndependent,
+    *,
+    jitter: float = 0.0,
+) -> tf.Tensor:
 
-
-
+    Kmm = Kuu(inducing_variable.inducing_variable, sampled_inducing_points, kernel.kernel)  # [M, M]
+    jittermat = tf.eye(inducing_variable.num_inducing, dtype=Kmm.dtype) * jitter
+    return Kmm + jittermat
 

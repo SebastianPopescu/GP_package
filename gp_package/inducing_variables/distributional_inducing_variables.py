@@ -63,6 +63,16 @@ class DistributionalInducingPointsBase(DistributionalInducingVariables):
     @property
     def num_inducing(self) -> Optional[tf.Tensor]:
         return tf.shape(self.Z_mean)[0]
+    
+    @property
+    def distribution(self) -> tfp.distributions.MultivariateNormalDiag:
+        return tfp.distributions.MultivariateNormalDiag(loc = self.Z_mean,
+            scale_diag = tf.sqrt(self.Z_var))
+
+    @property
+    def sampled_inducing_points(self) -> tf.Tensor:
+        return tfp.distributions.MultivariateNormalDiag(loc = self.Z_mean,
+            scale_diag = tf.sqrt(self.Z_var)).sample()
 
 
 class DistributionalInducingPoints(DistributionalInducingPointsBase):

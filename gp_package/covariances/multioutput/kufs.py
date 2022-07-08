@@ -1,23 +1,42 @@
 import tensorflow as tf
+import tensorflow_probability as tfp
 
 from typing import Any, Optional, Union
 
-from gp_package.covariances.kuf import Kuf
+from gp_package.covariances.kufs import Kuf
 
-from ...base import TensorLike, TensorType
-from ...inducing_variables import SharedIndependentInducingVariables, SharedIndependentDistributionalInducingVariables
-from ...kernels import SharedIndependent
-import tensorflow_probability as tfp
+from gpflow.base import TensorLike, TensorType
+from ...inducing_variables import SharedIndependentDistributionalInducingVariables
 
-def Kufs(
-    inducing_variable: Union[SharedIndependentInducingVariables,SharedIndependentDistributionalInducingVariables],
+
+from gpflow.inducing_variables import (
+    InducingPoints,
+    SharedIndependentInducingVariables,
+)
+from gpflow.kernels import (
+    MultioutputKernel,
+    SharedIndependent,
+)
+
+from ...kernels import DistributionalSharedIndependent
+from ..dispatch import Kuf
+
+
+@Kuf.register(SharedIndependentInducingVariables, SharedIndependent, object)
+def Kuf_shared_shared(
+    inducing_variable: SharedIndependentInducingVariables,
     kernel: SharedIndependent,
-    Xnew: Union[tf.Tensor, tfp.distributions.MultivariateNormalDiag],
-    seed : Optional[Any] = None
+    Xnew: tf.Tensor,
 ) -> tf.Tensor:
+    return Kuf(inducing_variable.inducing_variable, kernel.kernel, Xnew)  # [M, N]
 
-    """
-    Warning -- this currently works just with shared variables, hence a single kernel and associated hyperparameters per layer
-    """
-    return Kuf(inducing_variable.inducing_variable, kernel.kernel, Xnew, seed = seed)  # [M, N]
 
+@Kuf.register(SharedIndependentDistributionalInducingVariables, object, DistributionalSharedIndependent, object, object)
+def Kuf_shared_shared(
+    inducing_variable: SharedIndependentInducingVariables,
+    sampled_inducing_points: TensorLike,
+    kernel: SharedIndependent,
+    Xnew: tf.Tensor,
+    Xnew_moments: tfp.distributions.MultivariateNormalDiag
+) -> tf.Tensor:
+    return Kuf(inducing_variable.inducing_variable, sampled_inducing_points, kernel.kernel, Xnew, Xnew_moments)  # [M, N]

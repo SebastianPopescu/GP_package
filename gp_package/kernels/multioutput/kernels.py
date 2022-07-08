@@ -18,10 +18,11 @@ from typing import Optional, Sequence, Tuple, Union
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from ...base import Parameter, TensorType
-from ..base_kernel import Combination, Kernel
+from gpflow.base import Parameter, TensorType
+from ..base_kernel import DistributionalKernel
 
-class MultioutputKernel(Kernel):
+
+class DistributionalMultioutputKernel(DistributionalKernel):
     """
     Multi Output Kernel class.
     This kernel can represent correlation between outputs of different datapoints.
@@ -45,14 +46,16 @@ class MultioutputKernel(Kernel):
 
     @property
     @abc.abstractmethod
-    def latent_kernels(self) -> Tuple[Kernel, ...]:
+    def latent_kernels(self) -> Tuple[DistributionalKernel, ...]:
         """The underlying kernels in the multioutput kernel"""
         raise NotImplementedError
 
     @abc.abstractmethod
     def K(
-        self, X: Union[TensorType,tfp.distributions.MultivariateNormalDiag], 
-        X2: Optional[Union[TensorType,tfp.distributions.MultivariateNormalDiag]] = None, full_output_cov: bool = True
+        self, X: TensorType,
+        X_moments: tfp.distributions.MultivariateNormalDiag, 
+        X2: Optional[TensorType] = None, 
+        X2_moments: Optional[tfp.distributions.MultivariateNormalDiag] = None, full_output_cov: bool = True
     ) -> tf.Tensor:
         """
         Returns the correlation of f(X) and f(X2), where f(.) can be multi-dimensional.
@@ -79,25 +82,24 @@ class MultioutputKernel(Kernel):
 
     def __call__(
         self,
-        X: Union[TensorType,tfp.distributions.MultivariateNormalDiag],
-        X2: Optional[Union[TensorType,tfp.distributions.MultivariateNormalDiag]] = None,
+        X: TensorType,
+        X_moments: tfp.distributions.MultivariateNormalDiag,
+        X2: Optional[TensorType] = None,
+        X2_moments: Optional[tfp.distributions.MultivariateNormalDiag] = None,
         *,
         full_cov: bool = False,
-        full_output_cov: bool = True,
-        presliced: bool = False,
+        full_output_cov: bool = True
     ) -> tf.Tensor:
-        if not presliced:
-            # Warning - only works for SquaredExponential kernel
-            X, X2 = self.slice(X, X2)
+        
         if not full_cov and X2 is not None:
             raise ValueError(
                 "Ambiguous inputs: passing in `X2` is not compatible with `full_cov=False`."
             )
         if not full_cov:
             return self.K_diag(X, full_output_cov=full_output_cov)
-        return self.K(X, X2, full_output_cov=full_output_cov)
+        return self.K(X, X_moments, X2, X2_moments, full_output_cov=full_output_cov)
 
-class SharedIndependent(MultioutputKernel):
+class DistributionalSharedIndependent(DistributionalMultioutputKernel):
     """
     - Shared: we use the same kernel for each latent GP
     - Independent: Latents are uncorrelated a priori.
@@ -105,7 +107,7 @@ class SharedIndependent(MultioutputKernel):
     Use `gpflow.kernels` instead for more efficient code.
     """
 
-    def __init__(self, kernel: Kernel, output_dim: int) -> None:
+    def __init__(self, kernel: DistributionalKernel, output_dim: int) -> None:
         super().__init__()
         self.kernel = kernel
         self.output_dim = output_dim
@@ -116,17 +118,18 @@ class SharedIndependent(MultioutputKernel):
         return self.output_dim
 
     @property
-    def latent_kernels(self) -> Tuple[Kernel, ...]:
+    def latent_kernels(self) -> Tuple[DistributionalKernel, ...]:
         """The underlying kernels in the multioutput kernel"""
         return (self.kernel,)
 
     def K(
-        self, X: Union[TensorType,tfp.distributions.MultivariateNormalDiag], 
-        X2: Optional[Union[TensorType,tfp.distributions.MultivariateNormalDiag]] = None, full_output_cov: bool = True
+        self, X: TensorType,
+        X_moments: tfp.distributions.MultivariateNormalDiag, 
+        X2: Optional[TensorType] = None,
+        X2_moments: Optional[tfp.distributions.MultivariateNormalDiag] = None, full_output_cov: bool = True
     ) -> tf.Tensor:
-        print('inside K from Shared Independent')
-        print(X2)
-        K = self.kernel.K(X, X2)  # [N, N2]
+        
+        K = self.kernel.K(X, X_moments, X2, X2_moments)  # [N, N2]
         if full_output_cov:
             Ks = tf.tile(K[..., None], [1, 1, self.output_dim])  # [N, N2, P]
             return tf.transpose(tf.linalg.diag(Ks), [0, 2, 1, 3])  # [N, P, N2, P]
@@ -138,35 +141,4 @@ class SharedIndependent(MultioutputKernel):
         Ks = tf.tile(K[:, None], [1, self.output_dim])  # [N, P]
         return tf.linalg.diag(Ks) if full_output_cov else Ks  # [N, P, P] or [N, P]
 
-class SeparateIndependent(MultioutputKernel, Combination):
-    """
-    - Separate: we use different kernel for each output latent
-    - Independent: Latents are uncorrelated a priori.
-    """
-
-    def __init__(self, kernels: Sequence[Kernel], name: Optional[str] = None) -> None:
-        super().__init__(kernels=kernels, name=name)
-
-    @property
-    def num_latent_gps(self) -> int:
-        return len(self.kernels)
-
-    @property
-    def latent_kernels(self) -> Tuple[Kernel, ...]:
-        """The underlying kernels in the multioutput kernel"""
-        return tuple(self.kernels)
-
-    def K(
-        self, X: Union[TensorType,tfp.distributions.MultivariateNormalDiag], 
-        X2: Optional[Union[TensorType,tfp.distributions.MultivariateNormalDiag]] = None, full_output_cov: bool = True
-    ) -> tf.Tensor:
-        if full_output_cov:
-            Kxxs = tf.stack([k.K(X, X2) for k in self.kernels], axis=2)  # [N, N2, P]
-            return tf.transpose(tf.linalg.diag(Kxxs), [0, 2, 1, 3])  # [N, P, N2, P]
-        else:
-            return tf.stack([k.K(X, X2) for k in self.kernels], axis=0)  # [P, N, N2]
-
-    def K_diag(self, X: TensorType, full_output_cov: bool = False) -> tf.Tensor:
-        stacked = tf.stack([k.K_diag(X) for k in self.kernels], axis=1)  # [N, P]
-        return tf.linalg.diag(stacked) if full_output_cov else stacked  # [N, P, P]  or  [N, P]
 

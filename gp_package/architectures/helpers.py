@@ -28,19 +28,24 @@ from typing import List, Optional, Type, TypeVar, Union
 
 import numpy as np
 
-from ..base import default_float
-from ..inducing_variables import (
+from gpflow.base import default_float
+from gpflow.inducing_variables import (
     InducingPoints,
     SeparateIndependentInducingVariables,
     SharedIndependentInducingVariables,
     MultioutputInducingVariables,
+)
+
+from ..inducing_variables import (
     DistributionalInducingPoints,
     SeparateIndependentDistributionalInducingVariables,
     SharedIndependentDistributionalInducingVariables,
     MultioutputDistributionalInducingVariables
 )
 
-from ..kernels import SeparateIndependent, SharedIndependent, Kernel, MultioutputKernel, Stationary
+from gpflow.kernels import SeparateIndependent, SharedIndependent, Kernel, MultioutputKernel, Stationary
+from ..kernels import DistributionalSharedIndependent, DistributionalKernel, DistributionalMultioutputKernel
+
 
 import copy
 from typing import Any, Callable, Dict, Mapping, Optional, Pattern, Tuple, Type, TypeVar, Union
@@ -59,9 +64,9 @@ def deepcopy(input_module: M, memo: Optional[Dict[int, Any]] = None) -> M:
     """
     return copy.deepcopy(reset_cache_bijectors(input_module), memo)  # type: ignore
 
-from ..layers import GPLayer, DistGPLayer
-from ..mean_functions import MeanFunction, Identity, Linear, Zero
-from ..utils import set_trainable
+
+from gpflow.mean_functions import MeanFunction, Identity, Linear, Zero
+from gpflow.utilities import set_trainable
 
 
 def construct_basic_kernel(
@@ -100,10 +105,10 @@ def construct_basic_kernel(
 
 
 def construct_basic_hybrid_kernel(
-    kernels: Union[Kernel, List[Kernel]],
+    kernels: Union[DistributionalKernel, List[DistributionalKernel]],
     output_dim: Optional[int] = None,
     share_hyperparams: bool = False,
-) -> MultioutputKernel:
+) -> DistributionalMultioutputKernel:
     r"""
     Construct a :class:`~gpflow.kernels.MultioutputKernel` to use
     in :class:`GPLayer`\ s.
@@ -123,13 +128,18 @@ def construct_basic_hybrid_kernel(
         same type of kernel (Squared-Exponential, Matern12, and so on) is used for
         the different outputs, but the kernel can have different hyperparameter values for each.
     """
-    if isinstance(kernels, list):
-        mo_kern = SeparateIndependent(kernels)
-    elif not share_hyperparams:
-        copies = [deepcopy(kernels) for _ in range(output_dim)]
-        mo_kern = SeparateIndependent(copies)
-    else:
-        mo_kern = SharedIndependent(kernels, output_dim)
+
+    #TODO -- add these options eventaully
+
+    #if isinstance(kernels, list):
+    #    mo_kern = SeparateIndependent(kernels)
+    #elif not share_hyperparams:
+    #    copies = [deepcopy(kernels) for _ in range(output_dim)]
+    #    mo_kern = SeparateIndependent(copies)
+    #else:
+    
+    mo_kern = DistributionalSharedIndependent(kernels, output_dim)
+    
     return mo_kern
 
 def construct_basic_inducing_variables(
@@ -409,105 +419,5 @@ def construct_mean_function(
 
     return mean_function
 
-
-def construct_gp_layer(
-    num_data: int,
-    num_inducing: int,
-    input_dim: int,
-    output_dim: int,
-    kernel_class: Type[Stationary],
-    z_init: Optional[np.ndarray] = None,
-    name: Optional[str] = None,
-) -> GPLayer:
-    """
-    Builds a vanilla GP layer with a single kernel shared among all outputs,
-        shared inducing point variables and zero mean function.
-
-    :param num_data: total number of datapoints in the dataset, *N*.
-        Typically corresponds to ``X.shape[0] == len(X)``.
-    :param num_inducing: total number of inducing variables, *M*.
-        This parameter can be freely chosen by the user. General advice
-        is to pick it as high as possible, but smaller than *N*.
-        The computational complexity of the layer is cubic in *M*.
-    :param input_dim: dimensionality of the input data (or features) X.
-        Typically, this corresponds to ``X.shape[-1]``.
-    :param output_dim: The dimensionality of the outputs (or targets) ``Y``.
-        Typically, this corresponds to ``Y.shape[-1]``.
-    :param kernel_class: The kernel class used by the layer.
-        This can be as simple as :class:`gpflow.kernels.SquaredExponential`, or more complex,
-        for example, ``lambda **_: gpflow.kernels.Linear() + gpflow.kernels.Periodic()``.
-        It will be passed a ``lengthscales`` keyword argument.
-    :param z_init: The initial value for the inducing variable inputs.
-    :param name: The name for the GP layer.
-    """
-    lengthscale = float(input_dim) ** 0.5
-    base_kernel = kernel_class(lengthscales=np.full(input_dim, lengthscale))
-    kernel = construct_basic_kernel(base_kernel, output_dim=output_dim, share_hyperparams=True)
-    inducing_variable = construct_basic_inducing_variables(
-        num_inducing,
-        input_dim,
-        output_dim=output_dim,
-        share_variables=True,
-        z_init=z_init,
-    )
-    gp_layer = GPLayer(
-        kernel=kernel,
-        inducing_variable=inducing_variable,
-        num_data=num_data,
-        mean_function=Zero(),
-        name=name,
-    )
-    return gp_layer
-
-def construct_dist_gp_layer(
-    num_data: int,
-    num_inducing: int,
-    input_dim: int,
-    output_dim: int,
-    kernel_class: Type[Stationary],
-    z_init_mean: Optional[np.ndarray] = None,
-    z_init_var: Optional[np.ndarray] = None,
-    name: Optional[str] = None,
-) -> DistGPLayer:
-    """
-    Builds a vanilla GP layer with a single kernel shared among all outputs,
-        shared inducing point variables and zero mean function.
-
-    :param num_data: total number of datapoints in the dataset, *N*.
-        Typically corresponds to ``X.shape[0] == len(X)``.
-    :param num_inducing: total number of inducing variables, *M*.
-        This parameter can be freely chosen by the user. General advice
-        is to pick it as high as possible, but smaller than *N*.
-        The computational complexity of the layer is cubic in *M*.
-    :param input_dim: dimensionality of the input data (or features) X.
-        Typically, this corresponds to ``X.shape[-1]``.
-    :param output_dim: The dimensionality of the outputs (or targets) ``Y``.
-        Typically, this corresponds to ``Y.shape[-1]``.
-    :param kernel_class: The kernel class used by the layer.
-        This can be as simple as :class:`gpflow.kernels.SquaredExponential`, or more complex,
-        for example, ``lambda **_: gpflow.kernels.Linear() + gpflow.kernels.Periodic()``.
-        It will be passed a ``lengthscales`` keyword argument.
-    :param z_init: The initial value for the inducing variable inputs.
-    :param name: The name for the GP layer.
-    """
-    lengthscale = float(input_dim) ** 0.5
-    base_kernel = kernel_class(lengthscales=np.full(input_dim, lengthscale))
-    kernel = construct_basic_hybrid_kernel(base_kernel, output_dim=output_dim, share_hyperparams=True)
-    inducing_variable = construct_basic_distributional_inducing_variables(
-        num_inducing,
-        input_dim,
-        output_dim=output_dim,
-        share_variables=True,
-        z_init_mean=z_init_mean,
-        z_init_var=z_init_var,
-    )
-    dist_gp_layer = DistGPLayer(
-        kernel=kernel,
-        inducing_variable=inducing_variable,
-        num_data=num_data,
-        mean_function=Zero(),
-        name=name,
-    )
-    return dist_gp_layer
 
 

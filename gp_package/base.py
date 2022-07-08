@@ -24,6 +24,7 @@ from typing_extensions import Final
 from .config import default_float, default_summary_fmt
 
 if TYPE_CHECKING:  # pragma: no cover
+
     from IPython.lib import pretty
 
 DType = Union[np.dtype, tf.DType]
@@ -50,7 +51,6 @@ TensorLike: Final[Tuple[type, ...]] = (object,)
 :var TensorLike: Collection of tensor-like types for registering implementations with
     `multipledispatch` dispatchers.
 """
-
 
 _NativeScalar = Union[int, float]
 _Array = Sequence[Any]  # a nested array of int, float, bool etc. kept simple for readability

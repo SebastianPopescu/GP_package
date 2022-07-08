@@ -1,11 +1,3 @@
-from .inducing_variables import (
-    FallbackSeparateIndependentInducingVariables,
-    FallbackSharedIndependentInducingVariables,
-    MultioutputInducingVariables,
-    SeparateIndependentInducingVariables,
-    SharedIndependentInducingVariables,
-)
-
 from .distributional_inducing_variables import (
     FallbackSeparateIndependentDistributionalInducingVariables,
     FallbackSharedIndependentDistributionalInducingVariables,
@@ -15,12 +7,6 @@ from .distributional_inducing_variables import (
 )
 
 __all__ = [
-    "FallbackSeparateIndependentInducingVariables",
-    "FallbackSharedIndependentInducingVariables",
-    "MultioutputInducingVariables",
-    "SeparateIndependentInducingVariables",
-    "SharedIndependentInducingVariables",
-    "inducing_variables",
     "FallbackSeparateIndependentDistributionalInducingVariables",
     "FallbackSharedIndependentDistributionalInducingVariables",
     "MultioutputDistributionalInducingVariables",

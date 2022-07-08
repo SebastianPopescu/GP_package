@@ -1,10 +1,11 @@
-from .kuu import Kuu
-from .kuf import Kuf
-from .multioutput import Kuus, Kufs
+from . import kufs, kuus, multioutput
+from .dispatch import Kuf, Kuu
 
 __all__ = [
     "Kuf",
     "Kuu",
-    "Kuus",
-    "Kufs"
+    "dispatch",
+    "kufs",
+    "kuus",
+    "multioutput",
 ]
