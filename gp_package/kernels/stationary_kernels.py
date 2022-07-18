@@ -52,8 +52,8 @@ class Stationary(DistributionalKernel):
                 raise TypeError(f"Unknown keyword argument: {kwarg}")
 
         super().__init__(**kwargs)
-        self.variance = Parameter(variance, transform=positive())
-        self.lengthscales = Parameter(lengthscales, transform=positive())
+        self.variance = Parameter(variance, transform=positive(), name = 'kernel_variance')
+        self.lengthscales = Parameter(lengthscales, transform=positive(), name = 'lengthscales')
         
 
     @property

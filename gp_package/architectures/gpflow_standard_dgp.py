@@ -35,6 +35,8 @@ from .helpers import (
 from ..layers import SVGP
 from ..models import DeepGP
 from gpflow.mean_functions import Zero, Identity
+from gpflow.utilities import set_trainable
+
 
 @dataclass
 class Config:
@@ -80,7 +82,7 @@ class Config:
     """
 
 
-def _construct_kernel(input_dim: int, is_last_layer: bool) -> SquaredExponential:
+def _construct_kernel(input_dim: int, is_last_layer: bool, name: str) -> SquaredExponential:
     """
     Return a :class:`gpflow.kernels.SquaredExponential` kernel with ARD lengthscales set to
     2 and a small kernel variance of 1e-6 if the kernel is part of a hidden layer;
@@ -95,7 +97,7 @@ def _construct_kernel(input_dim: int, is_last_layer: bool) -> SquaredExponential
     # data) seems a bit weird - that's really long lengthscales? And I remember seeing
     # something where the value scaled with the number of dimensions before
     lengthscales = [0.101] * input_dim
-    return SquaredExponential(lengthscales=lengthscales, variance=variance)
+    return SquaredExponential(lengthscales=lengthscales, variance=variance, name = name)
 
 
 def build_deep_gp(X: np.ndarray, num_layers: int, config: Config) -> DeepGP:
@@ -134,14 +136,17 @@ def build_deep_gp(X: np.ndarray, num_layers: int, config: Config) -> DeepGP:
 
         # Pass in kernels, specify output dim (shared hyperparams/variables)
 
-        inducing_var = construct_basic_inducing_variables(
-            num_inducing=config.num_inducing, input_dim=D_in, share_variables=True, z_init=centroids
-        )
+        if i_layer==0:
+            inducing_var = construct_basic_inducing_variables(
+                num_inducing=config.num_inducing, input_dim=D_in, share_variables=True, z_init=centroids)
+        else:
+            inducing_var = construct_basic_inducing_variables(
+                num_inducing=config.num_inducing, input_dim=D_in, share_variables=True, z_init=None)
 
         kernel = construct_basic_kernel(
-            kernels=_construct_kernel(D_in, is_last_layer),
+            kernels=_construct_kernel(D_in, is_last_layer, f'kernel_layer_{i_layer}'),
             output_dim=D_out,
-            share_hyperparams=True,
+            share_hyperparams=True
         )
 
         assert config.whiten is True, "non-whitened case not implemented yet"
@@ -150,15 +155,19 @@ def build_deep_gp(X: np.ndarray, num_layers: int, config: Config) -> DeepGP:
             mean_function = Zero()
             q_sqrt_scaling = 1.0
         else:
-            mean_function = construct_mean_function(X_running, D_in, D_out)
-            X_running = mean_function(X_running)
-            if tf.is_tensor(X_running):
-                X_running = X_running.numpy()
+            #NOTE -- remaind to put this back to normal after debugging
+            #mean_function = construct_mean_function(X_running, D_in, D_out)
+            #X_running = mean_function(X_running)
+            #if tf.is_tensor(X_running):
+            #    X_running = X_running.numpy()
+            mean_function = Zero()
             q_sqrt_scaling = config.inner_layer_qsqrt_factor
 
+        dummy_lik = Gaussian(config.likelihood_noise_variance)
+        set_trainable(dummy_lik, False)
         layer = SVGP(
             kernel,
-            Gaussian(config.likelihood_noise_variance), #NOTE -- this is just a dummy likelihood, hidden layers are assumed to be noiseless
+            dummy_lik, #NOTE -- this is just a dummy likelihood, hidden layers are assumed to be noiseless, this will also result in unconnected gradients warnings appearing
             inducing_var,
             mean_function = mean_function,
             num_latent_gps = D_out)

@@ -49,10 +49,10 @@ from .misc import LikelihoodOutputs, batch_predict
 from .plotting_functions import get_regression_detailed_plot
 from gpflow.ci_utils import ci_niter
 
-def produce_regression_plots(model, num_epoch, start_point, end_point):
+def produce_regression_plots(model, num_epoch, start_point, end_point, dataset_name, file_name):
 
-    cmd = 'mkdir -p ./docs/my_figures/'
-    where_to_save = './docs/my_figures/'
+    cmd = 'mkdir -p ./docs/my_figures/'+dataset_name+'/'
+    where_to_save = f'./docs/my_figures/'+dataset_name+'/'
     os.system(cmd)
 
     input_space = np.linspace(start_point, end_point, 500).reshape((-1,1))
@@ -75,9 +75,7 @@ def produce_regression_plots(model, num_epoch, start_point, end_point):
 
             f_mean = current_preds[0]
             f_var = current_preds[1]
-            print(f'predictions at layer {current_layer}')
-            print(f_mean.shape)
-            print(f_var.shape)
+            
             f_mean_overall[current_layer].append(f_mean)
             f_var_overall[current_layer].append(f_var)
 
@@ -100,7 +98,7 @@ def produce_regression_plots(model, num_epoch, start_point, end_point):
         where_to_save = where_to_save,
         mean = f_mean_overall,
         var = f_var_overall, 
-        name_file = f'motor_plot_dist_dgp_epoch_{num_epoch}.png',
+        name_file =  file_name+f'_{num_epoch}.png',
         x_margin = X_MARGIN,
         y_margin = Y_MARGIN,
         X_test = input_space
@@ -131,21 +129,18 @@ def simple_training_loop(model: gpflow.models.SVGP,
     for epoch in range(epochs):
         
         batches = iter(train_dataset)
-        print('------- these are the batches ----')
-        print(batches)
         
         for _ in range(ci_niter(num_batches_per_epoch)):
             
-            print('was ist das?>')       
-            print(f'we are inside batch{_}')
             tf_optimization_step(model, next(batches), optimizer)
 
         epoch_id = epoch + 1
         if epoch_id % logging_epoch_freq == 0:
-            tf.print(f"Epoch {epoch_id}: ELBO (train) {model.elbo(data)}")
+            _elbo = model.elbo(data, True)
+            tf.print(f"Epoch {epoch_id}: ELBO (train) {_elbo[0]}- Exp. ll. (train) {_elbo[1]}- KLs (train) {_elbo[2]}")
         
         if epoch_id % plotting_epoch_freq == 0:
-            produce_regression_plots(model, epoch_id, x_training.min() - X_MARGIN, x_training.max() + X_MARGIN)
+            produce_regression_plots(model, epoch_id, x_training.min() - X_MARGIN, x_training.max() + X_MARGIN, 'motor', '_dgp_')
 
 
 
@@ -210,14 +205,16 @@ if __name__ == '__main__':
 
     NUM_INDUCING = 10
     HIDDEN_DIMS = 1
-    NUM_LAYERS = 3
+    NUM_LAYERS = 2
     X_MARGIN = 0.5
     Y_MARGIN = 0.1
     BATCH_SIZE = 32
+    NUM_EPOCHS = 1000
+
 
     ### TRAIN MODEL ###
     config = Config(
-        num_inducing=NUM_INDUCING, inner_layer_qsqrt_factor=1e-1, likelihood_noise_variance=1e-2, whiten=True, 
+        num_inducing=NUM_INDUCING, inner_layer_qsqrt_factor=1e-5, likelihood_noise_variance=1e-2, whiten=True, 
         hidden_layer_size=HIDDEN_DIMS, num_data = x_training.shape[0]
     )
 
@@ -235,21 +232,13 @@ if __name__ == '__main__':
     if x_training.shape[0] % BATCH_SIZE !=0:
         NUM_BATCHES_PER_EPOCH+=1
 
-    print('----- check this out -----')
-    print(NUM_BATCHES_PER_EPOCH)
-
-
-
-    print('*************************')
-    print(data)
-
     batched_dataset = tf.data.Dataset.from_tensor_slices(data).batch(BATCH_SIZE)
 
     simple_training_loop(model= deep_gp, 
         num_batches_per_epoch = NUM_BATCHES_PER_EPOCH,
         train_dataset = batched_dataset,
         optimizer = optimizer,
-        epochs = 50, 
+        epochs = NUM_EPOCHS, 
         logging_epoch_freq = 10, 
         plotting_epoch_freq = 10
     )

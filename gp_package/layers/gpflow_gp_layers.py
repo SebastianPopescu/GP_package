@@ -76,7 +76,6 @@ class SVGP(GPModel):
         super().__init__(kernel, likelihood, mean_function, num_latent_gps)
         self.whiten = whiten
 
-
         if not isinstance(inducing_variable, InducingVariables):
             self.inducing_variable = InducingPoints(inducing_variable)
         else:
@@ -129,6 +128,8 @@ class SVGP(GPModel):
     ) -> MeanAndVariance:
 
         return self.predict_f(Xnew, full_cov, full_output_cov)
+        #return self.predict_f_samples(Xnew, num_samples, full_cov, full_output_cov)
+
 
     def maximum_log_likelihood_objective(self, *args: Any, **kwargs: Any) -> tf.Tensor:
         """
