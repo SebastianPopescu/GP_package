@@ -18,10 +18,10 @@ def Kuf_kernel_inducingpoints(
 ) -> tf.Tensor:
     return kernel(inducing_variable.Z, Xnew)
 
-@Kuf.register(DistributionalInducingPoints, object, DistributionalKernel, TensorLike, tfp.distributions.MultivariateNormalDiag)
-def Kuf_kernel_distributionalinducingpoints(
-    inducing_variable: DistributionalInducingPoints, sampled_inducing_points: TensorLike, kernel: DistributionalKernel, Xnew: TensorType, Xnew_moments: tfp.distributions.MultivariateNormalDiag) -> tf.Tensor:
+@Kuf.register(object, DistributionalInducingPoints, DistributionalKernel, TensorLike, tfp.distributions.MultivariateNormalDiag)
+def Kuf_kernel_distributionalinducingpoints( sampled_inducing_points: TensorLike,
+    inducing_variable: DistributionalInducingPoints, kernel: DistributionalKernel, Xnew: TensorType, Xnew_moments: tfp.distributions.MultivariateNormalDiag) -> tf.Tensor:
 
     distributional_inducing_points = inducing_variable.distribution
 
-    return kernel(distributional_inducing_points, sampled_inducing_points, Xnew, Xnew_moments)
+    return kernel(sampled_inducing_points, distributional_inducing_points, Xnew, Xnew_moments)

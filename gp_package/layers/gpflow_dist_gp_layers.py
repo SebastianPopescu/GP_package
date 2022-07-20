@@ -17,6 +17,7 @@ from typing import Optional, Union, Any
 
 import numpy as np
 import tensorflow as tf
+import tensorflow_probability as tfp
 
 from .. import kullback_leiblers, posteriors
 from ..base import AnyNDArray, InputData, MeanAndVariance, Parameter, RegressionData, TensorLike
@@ -25,13 +26,13 @@ from gpflow.config import default_float
 from gpflow.inducing_variables import InducingVariables, InducingPoints
 from gpflow.kernels import Kernel
 from gpflow.likelihoods import Likelihood
-from ..mean_functions import MeanFunction
+from ..mean_functions import MeanFunction, Zero
 from gpflow.utilities import positive, triangular
-from gpflow.models import GPModel
+from gpflow.base import Module
 
 from ..inducing_variables.distributional_inducing_variables import DistributionalInducingVariables
 
-class Distributional_SVGP(GPModel):
+class Distributional_SVGP(Module):
     """
     TODO -- update documentation here
 
@@ -40,7 +41,6 @@ class Distributional_SVGP(GPModel):
     def __init__(
         self,
         kernel: Kernel,
-        likelihood: Likelihood, #TODO -- check gpflow.likelihoods.Likelihood
         inducing_variable: DistributionalInducingVariables,
         *,
         mean_function: Optional[MeanFunction] = None,
@@ -63,7 +63,13 @@ class Distributional_SVGP(GPModel):
           (relevant when feeding in external minibatches)
         """
         # init the super class, accept args
-        super().__init__(kernel, likelihood, mean_function, num_latent_gps)
+        super().__init__()
+            
+        self.kernel = kernel 
+        if mean_function is None:
+            mean_function = Zero()
+        self.mean_function = mean_function
+        self.num_latent_gps = num_latent_gps
         self.num_data = num_data
         self.whiten = whiten
 
@@ -102,11 +108,12 @@ class Distributional_SVGP(GPModel):
         )
 
     def predict_f(
-        self, Xnew: InputData, full_cov: bool = False, full_output_cov: bool = False
+        self, Xnew: InputData, Xnew_moments: tfp.distributions.MultivariateNormalDiag, full_cov: bool = False, full_output_cov: bool = False
     ) -> MeanAndVariance:
         
         mu, var = conditional(
             Xnew,
+            Xnew_moments,
             self.inducing_variable,
             self.kernel,
             self.q_mu,
@@ -120,16 +127,8 @@ class Distributional_SVGP(GPModel):
         return mu + self.mean_function(Xnew), var
 
     def __call__(
-        self, Xnew: InputData, full_cov: bool = False, full_output_cov: bool = False
+        self, Xnew: InputData, Xnew_moments: tfp.distributions.MultivariateNormalDiag, full_cov: bool = False, full_output_cov: bool = False
     ) -> MeanAndVariance:
 
-        return self.predict_f(Xnew, full_cov, full_output_cov)
+        return self.predict_f(Xnew, Xnew_moments, full_cov, full_output_cov)
 
-    def maximum_log_likelihood_objective(self, *args: Any, **kwargs: Any) -> tf.Tensor:
-        """
-        Objective for maximum likelihood estimation. Should be maximized. E.g.
-        log-marginal likelihood (hyperparameter likelihood) for GPR, or lower
-        bound to the log-marginal likelihood (ELBO) for sparse and variational
-        GPs.
-        """
-        raise NotImplementedError

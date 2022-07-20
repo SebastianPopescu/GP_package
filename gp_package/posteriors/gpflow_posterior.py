@@ -114,14 +114,14 @@ class IndependentPosteriorMultiOutput(IndependentPosterior):
     ) -> MeanAndVariance:
 
         # same as IndependentPosteriorSingleOutput except for following line
-        Knn = self.kernel.kernel(Xnew, full_cov=full_cov)
+        Knn = self.kernel.kernel(Xnew, Xnew_moments, full_cov=full_cov)
         # we don't call self.kernel() directly as that would do unnecessary tiling
 
         # sample from distributional inducing point here 
-        sampled_inducing_points = self.X_data.sampled_inducing_points
+        sampled_inducing_points = self.X_data.inducing_variable.sampled_inducing_points
 
-        Kmm = covariances.Kuu(self.X_data, sampled_inducing_points, self.kernel, jitter=default_jitter())  # [M, M]
-        Kmn = covariances.Kuf(self.X_data, sampled_inducing_points, self.kernel, Xnew, Xnew_moments)  # [M, N]
+        Kmm = covariances.Kuu(sampled_inducing_points, self.X_data, self.kernel, jitter=default_jitter())  # [M, M]
+        Kmn = covariances.Kuf(sampled_inducing_points, self.X_data, self.kernel, Xnew, Xnew_moments)  # [M, N]
         
         fmean, fvar = base_conditional(
             Kmn, Kmm, Knn, self.q_mu, full_cov=full_cov, q_sqrt=self.q_sqrt, white=self.whiten

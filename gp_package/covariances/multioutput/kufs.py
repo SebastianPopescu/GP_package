@@ -31,12 +31,12 @@ def Kuf_shared_shared(
     return Kuf(inducing_variable.inducing_variable, kernel.kernel, Xnew)  # [M, N]
 
 
-@Kuf.register(SharedIndependentDistributionalInducingVariables, object, DistributionalSharedIndependent, object, object)
+@Kuf.register(object, SharedIndependentDistributionalInducingVariables, DistributionalSharedIndependent, object, object)
 def Kuf_shared_shared(
-    inducing_variable: SharedIndependentInducingVariables,
     sampled_inducing_points: TensorLike,
+    inducing_variable: SharedIndependentInducingVariables,
     kernel: SharedIndependent,
     Xnew: tf.Tensor,
     Xnew_moments: tfp.distributions.MultivariateNormalDiag
 ) -> tf.Tensor:
-    return Kuf(inducing_variable.inducing_variable, sampled_inducing_points, kernel.kernel, Xnew, Xnew_moments)  # [M, N]
+    return Kuf(sampled_inducing_points, inducing_variable.inducing_variable, kernel.kernel, Xnew, Xnew_moments)  # [M, N]

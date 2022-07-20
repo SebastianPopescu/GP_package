@@ -13,6 +13,10 @@ from ...inducing_variables import (
 from gpflow.kernels import (
     SharedIndependent,
 )
+from ...kernels import (
+    DistributionalSharedIndependent
+)
+
 from ..dispatch import Kuu
 
 
@@ -27,16 +31,16 @@ def Kuu_shared_shared(
     jittermat = tf.eye(inducing_variable.num_inducing, dtype=Kmm.dtype) * jitter
     return Kmm + jittermat
 
-@Kuu.register(FallbackSharedIndependentDistributionalInducingVariables, object, SharedIndependent)
+@Kuu.register(object, FallbackSharedIndependentDistributionalInducingVariables, DistributionalSharedIndependent)
 def Kuu_distributional_shared_shared(
-    inducing_variable: FallbackSharedIndependentDistributionalInducingVariables,
     sampled_inducing_points: TensorLike,
-    kernel: SharedIndependent,
+    inducing_variable: FallbackSharedIndependentDistributionalInducingVariables,
+    kernel: DistributionalSharedIndependent,
     *,
     jitter: float = 0.0,
 ) -> tf.Tensor:
 
-    Kmm = Kuu(inducing_variable.inducing_variable, sampled_inducing_points, kernel.kernel)  # [M, M]
+    Kmm = Kuu(sampled_inducing_points, inducing_variable.inducing_variable, kernel.kernel)  # [M, M]
     jittermat = tf.eye(inducing_variable.num_inducing, dtype=Kmm.dtype) * jitter
     return Kmm + jittermat
 

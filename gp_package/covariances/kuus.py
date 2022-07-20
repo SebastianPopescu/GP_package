@@ -23,6 +23,7 @@ from gpflow.inducing_variables import InducingPoints
 from gp_package.base import TensorLike
 from ..inducing_variables import DistributionalInducingPoints
 from gpflow.kernels import Kernel
+from ..kernels import DistributionalKernel
 from .dispatch import Kuu
 
 
@@ -34,9 +35,9 @@ def Kuu_kernel_inducingpoints(
     Kzz += jitter * tf.eye(inducing_variable.num_inducing, dtype=Kzz.dtype)
     return Kzz
 
-@Kuu.register(DistributionalInducingPoints, object, Kernel, int)
-def Kuu_kernel_distributionalinducingpoints(
-    inducing_variable: DistributionalInducingPoints, sampled_inducing_points: TensorLike, kernel: Kernel, *, jitter: float = 0.0
+@Kuu.register(object, DistributionalInducingPoints, DistributionalKernel)
+def Kuu_kernel_distributionalinducingpoints(sampled_inducing_points: TensorLike,
+    inducing_variable: DistributionalInducingPoints,  kernel: Kernel, *, jitter: float = 0.0
 ) -> tf.Tensor:
 
     distributional_inducing_points = inducing_variable.distribution

@@ -55,6 +55,7 @@ class DistDeepGP(BayesianModel, ExternalDataTrainingLossMixin):
         """
         # init the super class, accept args
         #super().__init__(kernel, likelihood, mean_function, num_latent_gps)
+        self.likelihood = likelihood
         self.num_data = num_data
         self.f_layers = f_layers
 
@@ -66,7 +67,7 @@ class DistDeepGP(BayesianModel, ExternalDataTrainingLossMixin):
 
         list_KL = []
 
-        for layer, counter in  enumerate(self.f_layers):
+        for counter, layer in  enumerate(self.f_layers):
             
             if counter==0:
                 list_KL.append(kullback_leiblers.prior_kl(
@@ -75,17 +76,18 @@ class DistDeepGP(BayesianModel, ExternalDataTrainingLossMixin):
 
             else:
 
-                # TODO -- currently we can only do whiten = True
+                # NOTE -- currently we can only do whiten = True
+                # TODO -- try and implement un-whitened case as well
                 list_KL.append(kullback_leiblers.prior_kl(
-                    layer.inducing_variable, None, layer.kernel, layer.q_mu, layer.q_sqrt, whiten=layer.whiten)
+                    layer.inducing_variable, layer.inducing_variable.inducing_variable.Z_mean, layer.kernel, layer.q_mu, layer.q_sqrt, whiten=layer.whiten)
                 )
-        return tf.reduce_sum(list_KL)
+        return list_KL
 
     # type-ignore is because of changed method signature:
     def maximum_log_likelihood_objective(self, data: RegressionData) -> tf.Tensor:  # type: ignore
         return self.elbo(data)
 
-    def elbo(self, data: RegressionData) -> tf.Tensor:
+    def elbo(self, data: RegressionData, detailed_elbo: bool = False) -> tf.Tensor:
         """
         This gives a variational bound (the evidence lower bound or ELBO) on
         the log marginal likelihood of the model.
@@ -96,19 +98,23 @@ class DistDeepGP(BayesianModel, ExternalDataTrainingLossMixin):
         f_mean, f_var = self.predict_f(X, full_cov=False, full_output_cov=False)
         var_exp = self.likelihood.variational_expectations(f_mean, f_var, Y)
         if self.num_data is not None:
-            num_data = tf.cast(self.num_data, kl.dtype)
-            minibatch_size = tf.cast(tf.shape(X)[0], kl.dtype)
+            num_data = tf.cast(self.num_data, kl[0].dtype)
+            minibatch_size = tf.cast(tf.shape(X)[0], kl[0].dtype)
             scale = num_data / minibatch_size
         else:
             scale = tf.cast(1.0, kl.dtype)
-        return tf.reduce_sum(var_exp) * scale - kl
+        if detailed_elbo:
+            return tf.reduce_sum(var_exp) * scale - tf.reduce_sum(kl), tf.reduce_sum(var_exp) * scale, kl        
+        else:
+            return tf.reduce_sum(var_exp) * scale - tf.reduce_sum(kl)
+
 
     def predict_f(
         self, Xnew: InputData, num_samples: int = 1, full_cov: bool = False, full_output_cov: bool = False
     ) -> MeanAndVariance:
 
         features = Xnew
-        for layer, counter in enumerate(self.f_layers):
+        for counter, layer in enumerate(self.f_layers):
 
             if counter==0:
                 mean, cov = layer(features)
@@ -116,7 +122,7 @@ class DistDeepGP(BayesianModel, ExternalDataTrainingLossMixin):
             else:
 
                 moments = tfp.distributions.MultivariateNormalDiag(loc=mean, scale_diag=tf.sqrt(cov))
-                mean, cov = layer(moments, features)
+                mean, cov = layer(features, moments)
 
             if full_cov:
                 # mean: [..., N, P]
@@ -147,7 +153,7 @@ class DistDeepGP(BayesianModel, ExternalDataTrainingLossMixin):
 
         features = Xnew
 
-        for layer, counter in enumerate(self.f_layers):
+        for counter, layer in enumerate(self.f_layers):
 
             if counter==0:
                 mean, cov = layer(features)
@@ -155,7 +161,7 @@ class DistDeepGP(BayesianModel, ExternalDataTrainingLossMixin):
             else:
 
                 moments = tfp.distributions.MultivariateNormalDiag(loc=mean, scale_diag=tf.sqrt(cov))
-                mean, cov = layer(moments, features)
+                mean, cov = layer(features, moments)
 
             layer_moments.append([mean, cov])
 

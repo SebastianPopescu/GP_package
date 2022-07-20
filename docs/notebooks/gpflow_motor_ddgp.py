@@ -40,7 +40,7 @@ from gp_package.models import *
 from gp_package.layers import *
 from gp_package.kernels import *
 from gp_package.inducing_variables import *
-from gp_package.architectures import Config, build_deep_gp
+from gp_package.architectures import Config, build_dist_deep_gp
 from typing import Callable, Tuple, Optional
 from functools import wraps
 from tensorflow_probability.python.util.deferred_tensor import TensorMetaClass
@@ -115,7 +115,7 @@ def optimization_step(model: DeepGP, batch: Tuple[tf.Tensor, tf.Tensor], optimiz
     optimizer.apply_gradients(zip(grads, model.trainable_variables))
     return loss
 
-def simple_training_loop(model: gpflow.models.SVGP, 
+def simple_training_loop(model: DistDeepGP, 
     num_batches_per_epoch: int,
     train_dataset,
     optimizer,
@@ -140,7 +140,7 @@ def simple_training_loop(model: gpflow.models.SVGP,
             tf.print(f"Epoch {epoch_id}: ELBO (train) {_elbo[0]}- Exp. ll. (train) {_elbo[1]}- KLs (train) {_elbo[2]}")
         
         if epoch_id % plotting_epoch_freq == 0:
-            produce_regression_plots(model, epoch_id, x_training.min() - X_MARGIN, x_training.max() + X_MARGIN, 'motor', '_dgp_')
+            produce_regression_plots(model, epoch_id, x_training.min() - X_MARGIN, x_training.max() + X_MARGIN, 'motor', '_dist_dgp_')
 
 
 
@@ -209,7 +209,7 @@ if __name__ == '__main__':
     X_MARGIN = 0.5
     Y_MARGIN = 0.1
     BATCH_SIZE = 32
-    NUM_EPOCHS = 1000
+    NUM_EPOCHS = 5000
 
 
     ### TRAIN MODEL ###
@@ -218,7 +218,7 @@ if __name__ == '__main__':
         hidden_layer_size=HIDDEN_DIMS, num_data = x_training.shape[0]
     )
 
-    deep_gp: DeepGP = build_deep_gp(x_training, num_layers = NUM_LAYERS, config = config)
+    dist_deep_gp: DistDeepGP = build_dist_deep_gp(x_training, num_layers = NUM_LAYERS, config = config)
 
     data = (x_training, y_training)
 
@@ -234,7 +234,7 @@ if __name__ == '__main__':
 
     batched_dataset = tf.data.Dataset.from_tensor_slices(data).batch(BATCH_SIZE)
 
-    simple_training_loop(model= deep_gp, 
+    simple_training_loop(model= dist_deep_gp, 
         num_batches_per_epoch = NUM_BATCHES_PER_EPOCH,
         train_dataset = batched_dataset,
         optimizer = optimizer,

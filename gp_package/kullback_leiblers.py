@@ -20,11 +20,11 @@ from packaging.version import Version
 from gpflow.base import TensorType
 from gpflow.config import default_float, default_jitter
 
-from gp_package.base import TensorLike
+from gp_package.base import Parameter, TensorLike
 from .covariances import Kuu
 
 from gpflow.inducing_variables import InducingVariables
-from .inducing_variables import DistributionalInducingVariables
+from .inducing_variables import DistributionalInducingVariables, SharedIndependentDistributionalInducingVariables
 from gpflow.kernels import Kernel
 from .kernels import DistributionalKernel
 from gpflow.utilities import Dispatcher, to_default_float
@@ -46,12 +46,10 @@ def _kl_standard(
         K = Kuu(inducing_variable, kernel, jitter=default_jitter())  # [P, M, M] or [M, M]
         return gauss_kl(q_mu, q_sqrt, K)
 
-
-
-@prior_kl.register(DistributionalInducingVariables, object, Kernel, object, object)
+@prior_kl.register(DistributionalInducingVariables, Parameter, DistributionalKernel, object, object)
 def _kl_distributional(
     inducing_variable: DistributionalInducingVariables,
-    sampled_inducing_points: TensorLike,
+    sampled_inducing_points: Parameter,
     kernel: DistributionalKernel,
     q_mu: TensorType,
     q_sqrt: TensorType,
@@ -71,7 +69,9 @@ def gauss_kl(
     Compute the KL divergence KL[q || p] between::
 
           q(x) = N(q_mu, q_sqrt^2)
-
+/GP_package/gp_package/models/gpflow_dist_deep_gp.py:81 prior_kl_across_layers  *
+        list_KL.append(kullback_leiblers.prior_kl(
+    /home/sebastian.popescu/anaconda3/lib/python3.9/site-
     and::
 
           p(x) = N(0, K)    if K is not None

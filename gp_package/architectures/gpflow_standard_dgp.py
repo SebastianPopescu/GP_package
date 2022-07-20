@@ -25,7 +25,7 @@ import tensorflow as tf
 from scipy.cluster.vq import kmeans2
 
 from gpflow.kernels import SquaredExponential
-from gpflow.likelihoods import Gaussian
+from gpflow.likelihoods import Gaussian, Bernoulli, MultiClass
 
 from .helpers import (
     construct_basic_inducing_variables,
@@ -68,6 +68,16 @@ class Config:
     Support for non-constant input dimension architectures
     """
 
+    task_type: str
+    """
+    Can either be 'regression' or 'classification'
+    """
+
+    dim_output: int
+    """
+    Mostly to be used for 'classification' option
+    """
+
     num_data: int
 
     """
@@ -91,12 +101,12 @@ def _construct_kernel(input_dim: int, is_last_layer: bool, name: str) -> Squared
     :param input_dim: The input dimensionality of the layer.
     :param is_last_layer: Whether the kernel is part of the last layer in the Deep GP.
     """
-    variance = 1e-6 if not is_last_layer else 1.0
+    variance = 0.351 if not is_last_layer else 0.351
 
     # TODO: Looking at this initializing to 2 (assuming N(0, 1) or U[0,1] normalized
     # data) seems a bit weird - that's really long lengthscales? And I remember seeing
     # something where the value scaled with the number of dimensions before
-    lengthscales = [0.101] * input_dim
+    lengthscales = [0.351] * input_dim
     return SquaredExponential(lengthscales=lengthscales, variance=variance, name = name)
 
 
@@ -156,18 +166,15 @@ def build_deep_gp(X: np.ndarray, num_layers: int, config: Config) -> DeepGP:
             q_sqrt_scaling = 1.0
         else:
             #NOTE -- remaind to put this back to normal after debugging
-            #mean_function = construct_mean_function(X_running, D_in, D_out)
-            #X_running = mean_function(X_running)
-            #if tf.is_tensor(X_running):
-            #    X_running = X_running.numpy()
-            mean_function = Zero()
+            mean_function = construct_mean_function(X_running, D_in, D_out)
+            X_running = mean_function(X_running)
+            if tf.is_tensor(X_running):
+                X_running = X_running.numpy()
+            #mean_function = Zero()
             q_sqrt_scaling = config.inner_layer_qsqrt_factor
 
-        dummy_lik = Gaussian(config.likelihood_noise_variance)
-        set_trainable(dummy_lik, False)
         layer = SVGP(
             kernel,
-            dummy_lik, #NOTE -- this is just a dummy likelihood, hidden layers are assumed to be noiseless, this will also result in unconnected gradients warnings appearing
             inducing_var,
             mean_function = mean_function,
             num_latent_gps = D_out)
@@ -185,6 +192,14 @@ def build_deep_gp(X: np.ndarray, num_layers: int, config: Config) -> DeepGP:
         """
         gp_layers.append(layer)
 
-    likelihood = Gaussian(config.likelihood_noise_variance)
+
+    if config.task_type=="regression":
+        likelihood = Gaussian(config.likelihood_noise_variance)
+    elif config.task_type=='classification' and config.dim_output==1:
+        likelihood = Bernoulli()
+    elif config.task_type=="classification" and config.dim_output>1:
+        likelihood = MultiClass(config.dim_output)
+    else:
+        raise WarningMessage("wrong specification for likelihood")
     
     return DeepGP(gp_layers, likelihood, num_data = config.num_data)

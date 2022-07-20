@@ -23,17 +23,16 @@ from gpflow.config import default_float
 from gpflow.inducing_variables import InducingVariables, InducingPoints
 from gpflow.kernels import Kernel
 from gpflow.likelihoods import Likelihood
-from ..mean_functions import MeanFunction
+from ..mean_functions import MeanFunction, Zero
 from gpflow.utilities import positive, triangular
-from gpflow.models import GPModel
+from gpflow.base import Module
 #from .util import InducingVariablesLike, inducingpoint_wrapper
 
 
 InducingVariablesLike = Union[InducingVariables, tf.Tensor, AnyNDArray]
 InducingPointsLike = Union[InducingPoints, tf.Tensor, AnyNDArray]
 
-
-class SVGP(GPModel):
+class SVGP(Module):
     """
     This is the Sparse Variational GP (SVGP). The key reference is
 
@@ -51,7 +50,6 @@ class SVGP(GPModel):
     def __init__(
         self,
         kernel: Kernel,
-        likelihood: Likelihood,
         inducing_variable: InducingVariablesLike,
         *,
         mean_function: Optional[MeanFunction] = None,
@@ -72,8 +70,12 @@ class SVGP(GPModel):
         - num_data is the total number of observations, defaults to X.shape[0]
           (relevant when feeding in external minibatches)
         """
-        # init the super class, accept args
-        super().__init__(kernel, likelihood, mean_function, num_latent_gps)
+        super().__init__()
+        self.kernel = kernel
+        if mean_function is None:
+          mean_function = Zero()
+        self.mean_function = mean_function
+        self.num_latent_gps = num_latent_gps
         self.whiten = whiten
 
         if not isinstance(inducing_variable, InducingVariables):
@@ -130,12 +132,3 @@ class SVGP(GPModel):
         return self.predict_f(Xnew, full_cov, full_output_cov)
         #return self.predict_f_samples(Xnew, num_samples, full_cov, full_output_cov)
 
-
-    def maximum_log_likelihood_objective(self, *args: Any, **kwargs: Any) -> tf.Tensor:
-        """
-        Objective for maximum likelihood estimation. Should be maximized. E.g.
-        log-marginal likelihood (hyperparameter likelihood) for GPR, or lower
-        bound to the log-marginal likelihood (ELBO) for sparse and variational
-        GPs.
-        """
-        raise NotImplementedError

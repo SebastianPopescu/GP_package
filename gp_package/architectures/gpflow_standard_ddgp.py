@@ -19,13 +19,14 @@ arbitrary depth where each hidden layer has the same input dimensionality as the
 """
 
 from dataclasses import dataclass
+from warnings import WarningMessage
 
 import numpy as np
 import tensorflow as tf
 from scipy.cluster.vq import kmeans2
 
 from gpflow.kernels import SquaredExponential
-from gpflow.likelihoods import Gaussian
+from gpflow.likelihoods import Gaussian, Bernoulli, MultiClass
 
 from .helpers import (
     construct_basic_inducing_variables,
@@ -76,12 +77,23 @@ class Config:
     number of training points. To be used in the loss function
     """
 
+    task_type: str
+    """
+    Can either be 'regression' or 'classification'
+    """
+
+    dim_output: int
+    """
+    Mostly to be used for 'classification' option
+    """
+
     whiten: bool = True
     """
     Determines the parameterisation of the inducing variables.
     If `True`, :math:``p(u) = N(0, I)``, otherwise :math:``p(u) = N(0, K_{uu})``.
     .. seealso:: :attr:`gpflux.layers.GPLayer.whiten`
     """
+
 
 def _construct_euclidean_kernel(input_dim: int, is_last_layer: bool) -> SquaredExponential:
     """
@@ -92,12 +104,12 @@ def _construct_euclidean_kernel(input_dim: int, is_last_layer: bool) -> SquaredE
     :param input_dim: The input dimensionality of the layer.
     :param is_last_layer: Whether the kernel is part of the last layer in the Deep GP.
     """
-    variance = 1.351 if not is_last_layer else 1.351
+    variance = 0.351 if not is_last_layer else 0.351
 
     # TODO: Looking at this initializing to 2 (assuming N(0, 1) or U[0,1] normalized
     # data) seems a bit weird - that's really long lengthscales? And I remember seeing
     # something where the value scaled with the number of dimensions before
-    lengthscales = [1.351] * input_dim
+    lengthscales = [0.351] * input_dim
     return SquaredExponential(lengthscales=lengthscales, variance=variance)
 
 def _construct_hybrid_kernel(input_dim: int, is_last_layer: bool) -> Hybrid:
@@ -109,17 +121,17 @@ def _construct_hybrid_kernel(input_dim: int, is_last_layer: bool) -> Hybrid:
     :param input_dim: The input dimensionality of the layer.
     :param is_last_layer: Whether the kernel is part of the last layer in the Deep GP.
     """
-    variance = 1.351 if not is_last_layer else 1.351
+    variance = 0.351 if not is_last_layer else 0.351
 
     # TODO: Looking at this initializing to 2 (assuming N(0, 1) or U[0,1] normalized
     # data) seems a bit weird - that's really long lengthscales? And I remember seeing
     # something where the value scaled with the number of dimensions before
-    lengthscales = [1.351] * input_dim
+    lengthscales = [0.351] * input_dim
 
     return Hybrid(baseline_kernel='squared_exponential', lengthscales=lengthscales, variance=variance)
 
 
-def construct_basic_svgp_layer(config, centroids, D_in, D_out, is_last_layer):
+def construct_basic_svgp_layer(X_running, config, centroids, D_in, D_out, is_last_layer):
 
     # Pass in kernels, specify output dim (shared hyperparams/variables)
 
@@ -147,7 +159,6 @@ def construct_basic_svgp_layer(config, centroids, D_in, D_out, is_last_layer):
 
     layer = SVGP(
         kernel,
-        Gaussian(config.likelihood_noise_variance), #NOTE -- this is just a dummy likelihood, hidden layers are assumed to be noiseless
         inducing_var,
         mean_function = mean_function,
         num_latent_gps = D_out)
@@ -157,7 +168,7 @@ def construct_basic_svgp_layer(config, centroids, D_in, D_out, is_last_layer):
 
 
 
-def construct_basic_distributional_svgp_layer(config, centroids, D_in, D_out, is_last_layer):
+def construct_basic_distributional_svgp_layer(X_running, config, centroids, D_in, D_out, is_last_layer):
 
     # Pass in kernels, specify output dim (shared hyperparams/variables)
     """
@@ -211,7 +222,7 @@ def construct_basic_distributional_svgp_layer(config, centroids, D_in, D_out, is
         mean_function = Zero()
         q_sqrt_scaling = 1.0
     else:
-        mean_function = construct_mean_function(D_in, D_out, W = W)
+        mean_function = construct_mean_function(X_running, D_in, D_out)
         
         X_running = mean_function(X_running)
         if tf.is_tensor(X_running):
@@ -220,14 +231,10 @@ def construct_basic_distributional_svgp_layer(config, centroids, D_in, D_out, is
 
     layer = Distributional_SVGP(
         kernel,
-        Gaussian(config.likelihood_noise_variance), #NOTE -- this is just a dummy likelihood, hidden layers are assumed to be noiseless
         inducing_var,
         mean_function = mean_function,
         num_latent_gps = D_out)
     layer.q_sqrt.assign(layer.q_sqrt * q_sqrt_scaling)
-
-
-
 
     return layer
 
@@ -264,14 +271,20 @@ def build_dist_deep_gp(X: np.ndarray, num_layers: int, config: Config) -> DistDe
     for i_layer in range(num_layers):
         is_last_layer = i_layer == num_layers - 1
         D_in = input_dim
-        D_out = 1 if is_last_layer else config.hidden_layer_size
+        D_out = config.dim_output if is_last_layer else config.hidden_layer_size
 
         if i_layer ==0:
-            layer = construct_basic_svgp_layer(config, centroids, D_in, D_out, is_last_layer)
+            layer = construct_basic_svgp_layer(X_running, config, centroids, D_in, D_out, is_last_layer)
         else:
-            layer = construct_basic_distributional_svgp_layer(config, centroids, D_in, D_out, is_last_layer)
+            layer = construct_basic_distributional_svgp_layer(X_running, config, centroids, D_in, D_out, is_last_layer)
         gp_layers.append(layer)
 
-    likelihood = Gaussian(config.likelihood_noise_variance)
-    
+    if config.task_type=="regression":
+        likelihood = Gaussian(config.likelihood_noise_variance)
+    elif config.task_type=='classification' and config.dim_output==1:
+        likelihood = Bernoulli()
+    elif config.task_type=="classification" and config.dim_output>1:
+        likelihood = MultiClass(config.dim_output)
+    else:
+        raise WarningMessage("wrong specification for likelihood")
     return DistDeepGP(gp_layers, likelihood, num_data = config.num_data)

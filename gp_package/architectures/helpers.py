@@ -208,7 +208,7 @@ def construct_basic_inducing_variables(
                 assert len(z_init[i]) == num_ind_var
                 z_init_i = z_init[i]
             else:
-                z_init_i = np.random.randn(num_ind_var, input_dim).astype(dtype=default_float())
+                z_init_i = np.random.uniform(-0.5,0.5, (num_ind_var, input_dim)).astype(dtype=default_float())
             assert z_init_i.shape == (num_ind_var, input_dim)
             inducing_variables.append(InducingPoints(z_init_i))
         return SeparateIndependentInducingVariables(inducing_variables)
@@ -224,7 +224,7 @@ def construct_basic_inducing_variables(
                     )
                 z_init_o = z_init[o]
             else:
-                z_init_o = np.random.randn(num_inducing, input_dim).astype(dtype=default_float())
+                z_init_o = np.random.uniform(-0.5,0.5, (num_inducing, input_dim)).astype(dtype=default_float())
             inducing_variables.append(InducingPoints(z_init_o))
         return SeparateIndependentInducingVariables(inducing_variables)
 
@@ -234,10 +234,13 @@ def construct_basic_inducing_variables(
         z_init = (
             z_init
             if z_init_is_given
-            else np.random.randn(num_inducing, input_dim).astype(dtype=default_float())
+            else np.random.uniform(-0.5,0.5, (num_inducing, input_dim)).astype(dtype=default_float())
         )
         shared_ip = InducingPoints(z_init)
         return SharedIndependentInducingVariables(shared_ip)
+
+
+
 
 
 

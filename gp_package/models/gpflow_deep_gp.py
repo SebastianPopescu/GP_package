@@ -102,6 +102,8 @@ class DeepGP(BayesianModel, ExternalDataTrainingLossMixin):
         for layer in self.f_layers:
             mean, cov = layer(features)
         
+
+        
             ### sampling part ###
             if full_cov:
                 # mean: [..., N, P]
