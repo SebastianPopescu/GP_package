@@ -1,1 +1,1 @@
-# Basic GP package which includes Deep GPs and Distributional Deep GPs
+# All things GPs here. Built on GPflow and GPflux
