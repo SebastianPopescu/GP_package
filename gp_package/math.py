@@ -18,8 +18,8 @@ Math utilities
 """
 import tensorflow as tf
 
-from .config import default_jitter
-from .base import TensorType
+from gpflow.config import default_jitter
+from gpflow.base import TensorType
 
 
 def _cholesky_with_jitter(cov: TensorType) -> tf.Tensor:

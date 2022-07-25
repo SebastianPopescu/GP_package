@@ -28,15 +28,15 @@ from typing import List, Optional, Type, TypeVar, Union
 
 import numpy as np
 
-from ..base import default_float
-from ..inducing_variables import (
+from gpflow.base import default_float
+from gpflow.inducing_variables import (
     InducingPoints,
     SeparateIndependentInducingVariables,
     SharedIndependentInducingVariables,
     MultioutputInducingVariables,
 )
 
-from ..kernels import SeparateIndependent, SharedIndependent, Kernel, MultioutputKernel, Stationary
+from gpflow.kernels import SeparateIndependent, SharedIndependent, Kernel, MultioutputKernel, Stationary
 
 import copy
 from typing import Any, Callable, Dict, Mapping, Optional, Pattern, Tuple, Type, TypeVar, Union
@@ -55,9 +55,9 @@ def deepcopy(input_module: M, memo: Optional[Dict[int, Any]] = None) -> M:
     """
     return copy.deepcopy(reset_cache_bijectors(input_module), memo)  # type: ignore
 
-from ..layers import GPLayer
-from ..mean_functions import MeanFunction, Identity, Linear, Zero
-from ..utils import set_trainable
+
+from gpflow.mean_functions import MeanFunction, Identity, Linear, Zero
+from gpflow.utilities import set_trainable
 
 
 def construct_basic_kernel(
@@ -94,39 +94,6 @@ def construct_basic_kernel(
     return mo_kern
 
 
-
-def construct_basic_hybrid_kernel(
-    kernels: Union[Kernel, List[Kernel]],
-    output_dim: Optional[int] = None,
-    share_hyperparams: bool = False,
-) -> MultioutputKernel:
-    r"""
-    Construct a :class:`~gpflow.kernels.MultioutputKernel` to use
-    in :class:`GPLayer`\ s.
-
-    :param kernels: A single kernel or list of :class:`~gpflow.kernels.Kernel`\ s.
-        - When a single kernel is passed, the same kernel is used for all
-        outputs. Depending on ``share_hyperparams``, the hyperparameters will be
-        shared across outputs. You must also specify ``output_dim``.
-        - When a list of kernels is passed, each kernel in the list is used on a separate
-        output dimension and a :class:`gpflow.kernels.SeparateIndependent` is returned.
-    :param output_dim: The number of outputs. This is equal to the number of latent GPs
-        in the :class:`GPLayer`. When only a single kernel is specified for ``kernels``,
-        you must also specify ``output_dim``. When a list of kernels is specified for ``kernels``,
-        we assume that ``len(kernels) == output_dim``, and ``output_dim`` is not required.
-    :param share_hyperparams: If `True`, use the type of kernel and the same hyperparameters
-        (variance and lengthscales) for the different outputs. Otherwise, the
-        same type of kernel (Squared-Exponential, Matern12, and so on) is used for
-        the different outputs, but the kernel can have different hyperparameter values for each.
-    """
-    if isinstance(kernels, list):
-        mo_kern = SeparateIndependent(kernels)
-    elif not share_hyperparams:
-        copies = [deepcopy(kernels) for _ in range(output_dim)]
-        mo_kern = SeparateIndependent(copies)
-    else:
-        mo_kern = SharedIndependent(kernels, output_dim)
-    return mo_kern
 
 def construct_basic_inducing_variables(
     num_inducing: Union[int, List[int]],
@@ -194,7 +161,7 @@ def construct_basic_inducing_variables(
                 assert len(z_init[i]) == num_ind_var
                 z_init_i = z_init[i]
             else:
-                z_init_i = np.random.randn(num_ind_var, input_dim).astype(dtype=default_float())
+                z_init_i = np.random.uniform(-0.5,0.5, (num_ind_var, input_dim)).astype(dtype=default_float())
             assert z_init_i.shape == (num_ind_var, input_dim)
             inducing_variables.append(InducingPoints(z_init_i))
         return SeparateIndependentInducingVariables(inducing_variables)
@@ -210,7 +177,7 @@ def construct_basic_inducing_variables(
                     )
                 z_init_o = z_init[o]
             else:
-                z_init_o = np.random.randn(num_inducing, input_dim).astype(dtype=default_float())
+                z_init_o = np.random.uniform(-0.5,0.5, (num_inducing, input_dim)).astype(dtype=default_float())
             inducing_variables.append(InducingPoints(z_init_o))
         return SeparateIndependentInducingVariables(inducing_variables)
 
@@ -220,10 +187,12 @@ def construct_basic_inducing_variables(
         z_init = (
             z_init
             if z_init_is_given
-            else np.random.randn(num_inducing, input_dim).astype(dtype=default_float())
+            else np.random.uniform(-0.5,0.5, (num_inducing, input_dim)).astype(dtype=default_float())
         )
         shared_ip = InducingPoints(z_init)
         return SharedIndependentInducingVariables(shared_ip)
+
+
 
 
 
@@ -264,51 +233,4 @@ def construct_mean_function(
     return mean_function
 
 
-def construct_gp_layer(
-    num_data: int,
-    num_inducing: int,
-    input_dim: int,
-    output_dim: int,
-    kernel_class: Type[Stationary],
-    z_init: Optional[np.ndarray] = None,
-    name: Optional[str] = None,
-) -> GPLayer:
-    """
-    Builds a vanilla GP layer with a single kernel shared among all outputs,
-        shared inducing point variables and zero mean function.
 
-    :param num_data: total number of datapoints in the dataset, *N*.
-        Typically corresponds to ``X.shape[0] == len(X)``.
-    :param num_inducing: total number of inducing variables, *M*.
-        This parameter can be freely chosen by the user. General advice
-        is to pick it as high as possible, but smaller than *N*.
-        The computational complexity of the layer is cubic in *M*.
-    :param input_dim: dimensionality of the input data (or features) X.
-        Typically, this corresponds to ``X.shape[-1]``.
-    :param output_dim: The dimensionality of the outputs (or targets) ``Y``.
-        Typically, this corresponds to ``Y.shape[-1]``.
-    :param kernel_class: The kernel class used by the layer.
-        This can be as simple as :class:`gpflow.kernels.SquaredExponential`, or more complex,
-        for example, ``lambda **_: gpflow.kernels.Linear() + gpflow.kernels.Periodic()``.
-        It will be passed a ``lengthscales`` keyword argument.
-    :param z_init: The initial value for the inducing variable inputs.
-    :param name: The name for the GP layer.
-    """
-    lengthscale = float(input_dim) ** 0.5
-    base_kernel = kernel_class(lengthscales=np.full(input_dim, lengthscale))
-    kernel = construct_basic_kernel(base_kernel, output_dim=output_dim, share_hyperparams=True)
-    inducing_variable = construct_basic_inducing_variables(
-        num_inducing,
-        input_dim,
-        output_dim=output_dim,
-        share_variables=True,
-        z_init=z_init,
-    )
-    gp_layer = GPLayer(
-        kernel=kernel,
-        inducing_variable=inducing_variable,
-        num_data=num_data,
-        mean_function=Zero(),
-        name=name,
-    )
-    return gp_layer

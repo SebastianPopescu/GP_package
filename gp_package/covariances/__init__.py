@@ -1,16 +1,15 @@
-from .kuu import Kuu
-from .kuf import Kuf
-from .cvv import Cvv
-from .cvf import Cvf
-from .multioutput import Kuus, Kufs, Cvvs, Cvfs
+from . import kufs, kuus, cvfs, cvvs, multioutput
+from .dispatch import Kuf, Kuu, Cvv, Cvf
 
 __all__ = [
     "Kuf",
     "Kuu",
+    "kufs",
+    "kuus",
     "Cvf",
     "Cvv",
-    "Kuus",
-    "Kufs",
-    "Cvvs",
-    "Cvfs"
+    "cvfs",
+    "cvvs",
+    "dispatch",
+    "multioutput",
 ]

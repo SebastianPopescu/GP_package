@@ -1,232 +1,267 @@
+# -*- coding: utf-8 -*-
+from __future__ import print_function, division
+#from subprocess import HIGH_PRIORITY_CLASS
+import matplotlib as mpl
+
+
+mpl.use('Agg')
 import tensorflow as tf
 import numpy as np
+from collections import defaultdict
+import random
+import argparse
 import matplotlib.pyplot as plt
-from tqdm import tqdm
-import tensorflow_probability as tfp
-from sklearn.neighbors import KernelDensity
+import sys
+import os
+DTYPE=tf.float32
+import seaborn as sns
+from sklearn.cluster import  KMeans
+from matplotlib import rcParams
+import itertools
+from scipy.stats import norm
+import pandas as pd
+import scipy
+sys.setrecursionlimit(10000)
 
-from gp_package.base import TensorType
+from time import perf_counter
+from gpflow.base import TensorType
+
+import numpy as np
+import tensorflow as tf
+import tensorflow_probability as tfp
+
 tf.keras.backend.set_floatx("float64")
 
-from dataclasses import dataclass
 
+from sklearn.linear_model import LinearRegression
+import gpflow
 from gp_package.models import *
 from gp_package.layers import *
-from gp_package.kernels import *
-from gp_package.inducing_variables import *
-from gp_package.architectures import build_constant_input_dim_orthogonal_deep_gp
+from gpflow.kernels import *
+from gpflow.inducing_variables import *
+from gp_package.architectures import Config, build_orthogonal_deep_gp
 from typing import Callable, Tuple, Optional
 from functools import wraps
 from tensorflow_probability.python.util.deferred_tensor import TensorMetaClass
 
-def motorcycle_data():
-    """ Return inputs and outputs for the motorcycle dataset. We normalise the outputs. """
-    import pandas as pd
-    df = pd.read_csv("/home/sebastian.popescu/Desktop/my_code/GP_package/data/motor.csv", index_col=0)
-    X, Y = df["times"].values.reshape(-1, 1), df["accel"].values.reshape(-1, 1)
-    Y = (Y - Y.mean()) / Y.std()
-    X /= X.max()
-    return X, Y
+from .misc import LikelihoodOutputs, batch_predict
+from .plotting_functions import get_regression_detailed_plot
+from gpflow.ci_utils import ci_niter
 
+def produce_regression_plots(model, num_epoch, start_point, end_point, dataset_name, file_name):
 
-@dataclass
-class Config:
-    """
-    The configuration used by :func:`build_constant_input_dim_orthogonal_deep_gp`.
-    """
+    cmd = 'mkdir -p ./docs/my_figures/'+dataset_name+'/'
+    where_to_save = f'./docs/my_figures/'+dataset_name+'/'
+    os.system(cmd)
 
-    num_inducing_u: int
-    """
-    The number of inducing variables, *M*. The Deep GP uses the same number
-    of inducing variables in each layer.
-    """
+    input_space = np.linspace(start_point, end_point, 500).reshape((-1,1))
+    input_space = input_space.astype(np.float64)
 
+    # Get predictive mean and variance (both parametric/non-parametric)at hidden layers
 
-    num_inducing_v: int
-    """
-    The number of inducing variables, *M*. The Deep GP uses the same number
-    of inducing variables in each layer.
-    """
+    f_mean_overall = defaultdict()
+    f_var_overall = defaultdict()
+    for current_layer in range(NUM_LAYERS):
+        f_mean_overall[current_layer] = []
+        f_var_overall[current_layer] = []
 
-    inner_layer_qsqrt_factor: float
-    """
-    A multiplicative factor used to rescale the hidden layers'
-    :attr:`~gpflux.layers.GPLayer.q_sqrt`. Typically this value is chosen to be small
-    (e.g., 1e-5) to reduce noise at the start of training.
-    """
+    for nvm in range(100):
 
-    likelihood_noise_variance: float
-    """
-    The variance of the :class:`~gpflow.likelihoods.Gaussian` likelihood that is used
-    by the Deep GP.
-    """
-    hidden_layer_size : int
+        preds = model._evaluate_layer_wise_deep_gp(input_space)  
 
-    whiten: bool = True
-    """
-    Determines the parameterisation of the inducing variables.
-    If `True`, :math:``p(u) = N(0, I)``, otherwise :math:``p(u) = N(0, K_{uu})``.
-    .. seealso:: :attr:`gpflux.layers.GPLayer.whiten`
-    """
+        for current_layer in range(NUM_LAYERS):
+            current_preds = preds[current_layer]
 
+            f_mean = current_preds[0]
+            f_var = current_preds[1]
+            
+            f_mean_overall[current_layer].append(f_mean)
+            f_var_overall[current_layer].append(f_var)
 
+    for current_layer in range(NUM_LAYERS):
 
-class LikelihoodOutputs(tf.Module, metaclass=TensorMetaClass):
-    """
-    This class encapsulates the outputs of a :class:`~gpflux.layers.LikelihoodLayer`.
+        f_mean_overall[current_layer] = tf.concat(f_mean_overall[current_layer], axis = 1)
+        f_var_overall[current_layer] = tf.concat(f_var_overall[current_layer], axis = 1)
 
-    It contains the mean and variance of the marginal distribution of the final latent
-    :class:`~gpflux.layers.GPLayer`, as well as the mean and variance of the likelihood.
+        f_mean_overall[current_layer] = tf.reduce_mean(f_mean_overall[current_layer], axis = 1)
+        f_var_overall[current_layer] = tf.reduce_mean(f_var_overall[current_layer], axis = 1)
 
-    This class includes the `TensorMetaClass
-    <https://github.com/tensorflow/probability/blob/master/tensorflow_probability/python/util/deferred_tensor.py#L81>`_
-    to make objects behave as a `tf.Tensor`. This is necessary so that it can be
-    returned from the `tfp.layers.DistributionLambda` Keras layer.
-    """
+        f_mean_overall[current_layer] = f_mean_overall[current_layer].numpy()
+        f_var_overall[current_layer] = f_var_overall[current_layer].numpy()
 
-    def __init__(
-        self,
-        f_mean: TensorType,
-        f_var: TensorType,
-        y_mean: Optional[TensorType],
-        y_var: Optional[TensorType],
-    ):
-        super().__init__(name="likelihood_outputs")
-
-        self.f_mean = f_mean
-        self.f_var = f_var
-        self.y_mean = y_mean
-        self.y_var = y_var
-
-    def _value(
-        self, dtype: tf.dtypes.DType = None, name: str = None, as_ref: bool = False
-    ) -> tf.Tensor:
-        return self.f_mean
-
-    @property
-    def shape(self) -> tf.Tensor:
-        return self.f_mean.shape
-
-    @property
-    def dtype(self) -> tf.dtypes.DType:
-        return self.f_mean.dtype
-
-
-def batch_predict(
-    predict_callable: Callable[[np.ndarray], Tuple[np.ndarray, ...]], batch_size: int = 1000, num_samples: Optional[int] = None
-) -> Callable[[np.ndarray], Tuple[np.ndarray, ...]]:
-    """
-    Simple wrapper that transform a full dataset predict into batch predict.
-    :param predict_callable: desired predict function that we want to wrap so it's executed in
-     batch fashion.
-    :param batch_size: how many predictions to do within single batch.
-    """
-    if batch_size <= 0:
-        raise ValueError(f"Batch size has to be positive integer!")
-
-    @wraps(predict_callable)
-    def wrapper(x: np.ndarray) -> Tuple[np.ndarray, ...]:
-        batches_f_mean = []
-        batches_f_var = []
-        batches_y_mean = []
-        batches_y_var = []
-        for x_batch in tf.data.Dataset.from_tensor_slices(x).batch(
-            batch_size=batch_size, drop_remainder=False
-        ):
-            batch_predictions, nvm = predict_callable(x_batch)
-            print('---- sanity check step ----')
-            print(batch_predictions)
-            batches_f_mean.append(batch_predictions.f_mean)
-            batches_f_var.append(batch_predictions.f_var)
-            batches_y_mean.append(batch_predictions.y_mean)
-            batches_y_var.append(batch_predictions.y_var)
-
-        return LikelihoodOutputs(
-            tf.concat(batches_f_mean, axis=0),
-            tf.concat(batches_f_var, axis=0),
-            tf.concat(batches_y_mean, axis=0),
-            tf.concat(batches_y_var, axis=0)
+    
+    get_regression_detailed_plot(
+        num_layers = NUM_LAYERS,
+        X_training = x_training,
+        Y_training = y_training,
+        where_to_save = where_to_save,
+        mean = f_mean_overall,
+        var = f_var_overall, 
+        name_file =  file_name+f'_{num_epoch}.png',
+        x_margin = X_MARGIN,
+        y_margin = Y_MARGIN,
+        X_test = input_space
         )
 
-    return wrapper
 
-X, Y = motorcycle_data()
-num_data, d_xim = X.shape
+def optimization_step(model: OrthogonalDeepGP, batch: Tuple[tf.Tensor, tf.Tensor], optimizer):
+    
+    with tf.GradientTape(watch_accessed_variables=False) as tape:
+        tape.watch(model.trainable_variables)
+        loss = model.training_loss(batch)
+    
+    grads = tape.gradient(loss, model.trainable_variables)
+    optimizer.apply_gradients(zip(grads, model.trainable_variables))
+    return loss
 
-X_MARGIN, Y_MARGIN = 0.1, 0.5
-fig, ax = plt.subplots()
-ax.scatter(X, Y, marker='x', color='k');
-ax.set_ylim(Y.min() - Y_MARGIN, Y.max() + Y_MARGIN);
-ax.set_xlim(X.min() - X_MARGIN, X.max() + X_MARGIN);
-plt.savefig('./motor_dataset.png')
-plt.close()
+def simple_training_loop(model: gpflow.models.SVGP, 
+    num_batches_per_epoch: int,
+    train_dataset,
+    optimizer,
+    epochs: int = 1, 
+    logging_epoch_freq: int = 10, 
+    plotting_epoch_freq: int = 10
+    ):
 
-NUM_INDUCING = 10
-NUM_LAYERS = 1
+    tf_optimization_step = tf.function(optimization_step)
 
-config = Config(
-    num_inducing_u=NUM_INDUCING, num_inducing_v=NUM_INDUCING, inner_layer_qsqrt_factor=1e-1, likelihood_noise_variance=1e-2, 
-    whiten=True, hidden_layer_size=X.shape[1]
-)
-dist_deep_gp: DistDeepGP = build_constant_input_dim_orthogonal_deep_gp(X, num_layers=NUM_LAYERS, config=config)
+    for epoch in range(epochs):
+        
+        batches = iter(train_dataset)
+        
+        for _ in range(ci_niter(num_batches_per_epoch)):
+            
+            tf_optimization_step(model, next(batches), optimizer)
 
-model = dist_deep_gp.as_training_model()
-model.compile(tf.optimizers.Adam(1e-2))
-
-history = model.fit({"inputs": X, "targets": Y}, epochs=int(2e3), verbose=1)
-fig, ax = plt.subplots()
-ax.plot(history.history["loss"])
-ax.set_xlabel('Epoch')
-ax.set_ylabel('Loss')
-plt.savefig(f"./figures/motor_dataset_loss_orthogonal_deep_gp_num_layers_{NUM_LAYERS}_num_inducing_{NUM_INDUCING}.png")
-plt.close()
-
-fig, ax = plt.subplots()
-num_data_test = 200
-X_test = np.linspace(X.min() - X_MARGIN, X.max() + X_MARGIN, num_data_test).reshape(-1, 1)
-model = dist_deep_gp.as_prediction_model()
-#out = model(X_test)
-NUM_TESTING = X_test.shape[0]
-
-### Multi-sample case ##
-# NOTE -- we just tile X_test NUM_SAMPLES times
-
-NUM_SAMPLES = 25
-
-X_test_tiled = np.tile(X_test, (NUM_SAMPLES,1))
-out = batch_predict(model)(X_test_tiled)
-
-print(out)
-
-mu = out.y_mean.numpy().squeeze()
-var = out.y_var.numpy().squeeze()
-
-print(' ---- size of predictions ----')
-print(mu.shape)
-print(var.shape)
-
-mu = np.mean(mu.reshape((NUM_SAMPLES, NUM_TESTING)), axis = 0)
-var = np.mean(var.reshape((NUM_SAMPLES, NUM_TESTING)), axis = 0)
-
-print(' ---- size of predictions ----')
-print(mu.shape)
-print(var.shape)
-
-X_test = X_test.squeeze()
-
-for i in [1, 2]:
-    lower = mu - i * np.sqrt(var)
-    upper = mu + i * np.sqrt(var)
-    ax.fill_between(X_test, lower, upper, color="C1", alpha=0.3)
-
-ax.set_ylim(Y.min() - Y_MARGIN, Y.max() + Y_MARGIN)
-ax.set_xlim(X.min() - X_MARGIN, X.max() + X_MARGIN)
-ax.plot(X, Y, "kx", alpha=0.5)
-ax.plot(X_test, mu, "C1")
-ax.set_xlabel('time')
-ax.set_ylabel('acc')
-plt.savefig(f"./figures//motor_dataset_orthogonal_deep_gp_num_layers_{NUM_LAYERS}_num_inducing_{NUM_INDUCING}.png")
-plt.close()
+        epoch_id = epoch + 1
+        if epoch_id % logging_epoch_freq == 0:
+            _elbo = model.elbo(data, True)
+            tf.print(f"Epoch {epoch_id}: ELBO (train) {_elbo[0]}- Exp. ll. (train) {_elbo[1]}- KLs (train) {_elbo[2]}")
+        
+        if epoch_id % plotting_epoch_freq == 0:
+            produce_regression_plots(model, epoch_id, x_training.min() - X_MARGIN, x_training.max() + X_MARGIN, 'motor', '_dgp_')
 
 
 
+if __name__ == '__main__':
+
+    #####################################################
+    ########### Get Motor data ##########################
+    #####################################################
+
+
+    def motorcycle_data():
+        """ Return inputs and outputs for the motorcycle dataset. We normalise the outputs. """
+        import pandas as pd
+        df = pd.read_csv("/home/sebastian.popescu/Desktop/my_code/GP_package/docs/notebooks/data/motor.csv", index_col=0)
+        X, Y = df["times"].values.reshape(-1, 1), df["accel"].values.reshape(-1, 1)
+        Y = (Y - Y.mean()) / Y.std()
+        X /= X.max()
+        return X, Y
+
+    X_data, Y_data = motorcycle_data()
+    num_data, d_xim = X_data.shape
+
+
+    np.random.seed(7)
+    lista = np.arange(X_data.shape[0])
+    np.random.shuffle(lista)
+    cutoff = int(num_data * 0.8)
+    index_training = lista[:cutoff]
+    index_testing = lista[cutoff:]
+
+    x_values_training_np = X_data[index_training,...]
+    y_values_training_np = Y_data[index_training,...]
+    
+    print('----- size of training dataset -------')
+    print(x_values_training_np.shape)
+    print(y_values_training_np.shape)
+    x_values_testing_np = X_data[index_testing,...]
+    y_values_testing_np = Y_data[index_testing,...]
+    
+    print('------- size of testing dataset ---------')
+    print(x_values_testing_np.shape)
+    print(y_values_testing_np.shape)
+
+    x_training = x_values_training_np.reshape((-1, d_xim)).astype(np.float64)
+    x_testing = x_values_testing_np.reshape((-1, d_xim)).astype(np.float64)
+
+    y_training = y_values_training_np.reshape((-1, 1)).astype(np.float64)
+    y_testing = y_values_testing_np.reshape((-1, 1)).astype(np.float64)
+
+    ###############################################################
+    ########### Create model and train it #########################
+    ###############################################################
+
+    #train_dataset = tf.data.Dataset.from_tensor_slices((x_training, y_training)).shuffle(buffer_size=900 + 1).batch(32)
+
+    """
+    fig, ax = plt.subplots(1, 1, figsize=(6, 6))
+    ax.scatter(x, y, s=2, label="data")
+    xx = np.linspace(-1, 2, 101)[:, np.newaxis]
+    # ax.plot(xx,  _f(xx), c='k')
+    """
+
+    NUM_INDUCING = 10
+    HIDDEN_DIMS = 1
+    NUM_LAYERS = 2
+    X_MARGIN = 0.5
+    Y_MARGIN = 0.1
+    BATCH_SIZE = 32
+    NUM_EPOCHS = 1000
+
+
+    ### TRAIN MODEL ###
+    config = Config(
+        num_inducing_u=NUM_INDUCING, num_inducing_v=NUM_INDUCING, inner_layer_qsqrt_factor=1e-5, likelihood_noise_variance=1e-2, whiten=True, 
+        hidden_layer_size=HIDDEN_DIMS, task_type="regression", dim_output = 1, num_data = x_training.shape[0]
+    )
+
+    deep_gp: OrthogonalDeepGP = build_orthogonal_deep_gp(x_training, num_layers = NUM_LAYERS, config = config)
+
+    data = (x_training, y_training)
+
+    optimizer = tf.optimizers.Adam()
+    #training_loss = deep_gp.training_loss_closure(
+    #    data
+    #    )  # We save the compiled closure in a variable so as not to re-compile it each step
+    #optimizer.minimize(training_loss, deep_gp.trainable_variables)  # Note that this does a single step
+    NUM_BATCHES_PER_EPOCH = int(x_training.shape[0] / BATCH_SIZE)
+
+    if x_training.shape[0] % BATCH_SIZE !=0:
+        NUM_BATCHES_PER_EPOCH+=1
+
+    batched_dataset = tf.data.Dataset.from_tensor_slices(data).batch(BATCH_SIZE)
+
+    simple_training_loop(model= deep_gp, 
+        num_batches_per_epoch = NUM_BATCHES_PER_EPOCH,
+        train_dataset = batched_dataset,
+        optimizer = optimizer,
+        epochs = NUM_EPOCHS, 
+        logging_epoch_freq = 10, 
+        plotting_epoch_freq = 10
+    )
+
+    """
+
+    batched_dataset = tf.data.Dataset.from_tensor_slices(data).batch(BATCH_SIZE)
+    training_loss = deep_gp.training_loss_closure(iter(batched_dataset))
+
+    optimizer.minimize(training_loss, deep_gp.trainable_variables)  # Note that this does a single step
+    """
+
+
+    """
+    model = dist_deep_gp.as_training_model()
+    model.compile(tf.optimizers.Adam(1e-2))
+
+    for epoch_iterator in range(5):
+
+        history = model.fit({"inputs": x_training, "targets": y_training}, epochs=int(10 * epoch_iterator), verbose=1)
+
+        ########### Get results on testing set and produce plots #########################
+        #model_testing = dist_deep_gp.as_prediction_model()
+
+        produce_regression_plots(epoch_iterator, x_training.min() - X_MARGIN, x_training.max() + X_MARGIN)
+
+    """

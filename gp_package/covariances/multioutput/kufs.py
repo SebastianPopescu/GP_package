@@ -1,23 +1,30 @@
 import tensorflow as tf
+import tensorflow_probability as tfp
 
 from typing import Any, Optional, Union
 
-from gp_package.covariances.kuf import Kuf
+from gp_package.covariances.kufs import Kuf
 
-from ...base import TensorLike, TensorType
-from ...inducing_variables import SharedIndependentInducingVariables
-from ...kernels import SharedIndependent
-import tensorflow_probability as tfp
+from gpflow.base import TensorLike, TensorType
 
-def Kufs(
+from gpflow.inducing_variables import (
+    InducingPoints,
+    SharedIndependentInducingVariables,
+)
+from gpflow.kernels import (
+    MultioutputKernel,
+    SharedIndependent,
+)
+
+from ..dispatch import Kuf
+
+
+@Kuf.register(SharedIndependentInducingVariables, SharedIndependent, object)
+def Kuf_shared_shared(
     inducing_variable: SharedIndependentInducingVariables,
     kernel: SharedIndependent,
     Xnew: tf.Tensor,
-    seed : Optional[Any] = None
 ) -> tf.Tensor:
+    return Kuf(inducing_variable.inducing_variable, kernel.kernel, Xnew)  # [M, N]
 
-    """
-    Warning -- this currently works just with shared variables, hence a single kernel and associated hyperparameters per layer
-    """
-    return Kuf(inducing_variable.inducing_variable, kernel.kernel, Xnew, seed = seed)  # [M, N]
 

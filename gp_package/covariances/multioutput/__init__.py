@@ -1,11 +1,8 @@
-from .kuus import Kuus 
-from .kufs import Kufs
-from .cvvs import Cvvs
-from .cvfs import Cvfs
+from . import kufs, kuus, cvfs, cvvs
 
 __all__ = [
-    "Kuus",
-    "Kufs",
-    "Cvvs",
-    "Cvfs"
+    "kufs",
+    "kuus",
+    "cvfs",
+    "cvvs"
 ]

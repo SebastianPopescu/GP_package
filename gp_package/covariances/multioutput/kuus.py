@@ -1,30 +1,23 @@
 import tensorflow as tf
 
-from typing import Any, Union, Optional
 
-from gp_package.covariances.kuu import Kuu
+from typing import Union
+from gpflow.inducing_variables import FallbackSharedIndependentInducingVariables
+from gpflow.base import TensorLike
+from gpflow.kernels import (
+    SharedIndependent,
+)
+from ..dispatch import Kuu
 
-from ...config import default_float
-from ...inducing_variables import FallbackSharedIndependentInducingVariables
-from ...kernels import SharedIndependent
 
-def Kuus(
-    inducing_variable:FallbackSharedIndependentInducingVariables,
+@Kuu.register(FallbackSharedIndependentInducingVariables, SharedIndependent)
+def Kuu_shared_shared(
+    inducing_variable: FallbackSharedIndependentInducingVariables,
     kernel: SharedIndependent,
     *,
     jitter: float = 0.0,
-    seed : Optional[Any] = None
 ) -> tf.Tensor:
-
-    """
-    Warning -- this currently works just with shared variables, hence a single kernel and associated hyperparameters per layer
-    """
-    
-    Kmm = Kuu(inducing_variable.inducing_variable, kernel.kernel, seed = seed)  # [M, M]
+    Kmm = Kuu(inducing_variable.inducing_variable, kernel.kernel)  # [M, M]
     jittermat = tf.eye(inducing_variable.num_inducing, dtype=Kmm.dtype) * jitter
     return Kmm + jittermat
-
-
-
-
 

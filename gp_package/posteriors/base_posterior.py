@@ -6,24 +6,41 @@ from typing import Optional, Tuple, Type, Union
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from ..base import MeanAndVariance, Module, Parameter, RegressionData, TensorType
-from ..conditionals.utils_conditionals import *
-from ..config import default_float, default_jitter
-from ..covariances import Kuf, Kuu, Kuus, Kufs, Cvf, Cvv, Cvvs, Cvfs
-from ..inducing_variables import (
+from gpflow import kernels
+from gpflow.mean_functions import MeanFunction
+from gpflow.base import MeanAndVariance, Module, Parameter, RegressionData, TensorType
+from gpflow.conditionals.util import (
+    base_conditional,
+    base_conditional_with_lm,
+    expand_independent_outputs,
+    fully_correlated_conditional,
+    independent_interdomain_conditional,
+    mix_latent_gp,
+    separate_independent_conditional_implementation,
+)
+from gpflow.config import default_float, default_jitter
+from ..covariances import Kuf, Kuu #NOTE -- getting the dispatches essentially
+from gpflow.inducing_variables import (
+    FallbackSeparateIndependentInducingVariables,
+    FallbackSharedIndependentInducingVariables,
     InducingPoints,
     InducingVariables,
+    SeparateIndependentInducingVariables,
     SharedIndependentInducingVariables,
 )
-from ..kernels import *
-from ..mean_functions import MeanFunction
-import numpy as np
 
-class AbstractPosterior(Module, ABC):
+from gpflow.kernels import Kernel
+from gpflow.mean_functions import MeanFunction
+from gpflow.utilities import Dispatcher, add_noise_cov
+from gpflow.utilities.ops import eye, leading_transpose
+
+
+class AbstractOrthogonalPosterior(Module, ABC):
     def __init__(
         self,
         kernel: Kernel,
         X_data: Union[tf.Tensor, InducingVariables],
+        V_data: Union[tf.Tensor, InducingVariables],
         cache: Optional[Tuple[tf.Tensor, ...]] = None,
         mean_function: Optional[MeanFunction] = None,
     ) -> None:
@@ -37,7 +54,8 @@ class AbstractPosterior(Module, ABC):
         super().__init__()
 
         self.kernel = kernel
-        self.X_data = X_data
+        self.inducing_variable_u = X_data
+        self.inducing_variable_v = V_data
         self.cache = cache
         self.mean_function = mean_function
 
@@ -48,41 +66,48 @@ class AbstractPosterior(Module, ABC):
             return mean + self.mean_function(Xnew)
 
     def fused_predict_f(
-        self, Xnew: TensorType, full_cov: bool = False, full_output_cov: bool = False
+        self, Xnew: TensorType, *, full_cov: bool = False, full_output_cov: bool = False,
+        detailed_moments: bool = False
     ) -> MeanAndVariance:
         """
         Computes predictive mean and (co)variance at Xnew, including mean_function
         Does not make use of caching
         """
-        mean, cov = self._conditional_fused(
-            Xnew, full_cov=full_cov, full_output_cov=full_output_cov
+        mean, cov = self._conditional_fused_OrthogonalSVGP(
+            Xnew, full_cov=full_cov, full_output_cov=full_output_cov, detailed_moments = detailed_moments
         )
         return self._add_mean_function(Xnew, mean), cov
 
+
     @abstractmethod
-    def _conditional_fused(
-        self, Xnew: TensorType, full_cov: bool = False, full_output_cov: bool = False
+    def _conditional_fused_OrthogonalSVGP(
+        self, Xnew: TensorType, *, full_cov: bool = False, full_output_cov: bool = False, detailed_moments: bool = False
     ) -> MeanAndVariance:
         """
-        Computes predictive mean and (co)variance at Xnew, *excluding* mean_function
-        Does not make use of caching
+        someting
         """
+    
 
-class BasePosterior(AbstractPosterior):
+class BaseOrthogonalPosterior(AbstractOrthogonalPosterior):
     def __init__(
         self,
         kernel: Kernel,
-        inducing_variable: InducingVariables,
-        q_mu: tf.Tensor,
-        q_sqrt: tf.Tensor,
+        inducing_variable_u: InducingVariables,
+        inducing_variable_v: InducingVariables,
+        q_mu_u: tf.Tensor,
+        q_mu_v: tf.Tensor,
+        q_sqrt_u: tf.Tensor,
+        q_sqrt_v: tf.Tensor,
         whiten: bool = True,
         mean_function: Optional[MeanFunction] = None,
     ):
 
-        super().__init__(kernel, inducing_variable, mean_function=mean_function)
+        super().__init__(kernel, inducing_variable_u, inducing_variable_v, mean_function=mean_function)
         self.whiten = whiten
-        self.q_mu = q_mu
-        self.q_sqrt = q_sqrt
+        self.q_mu_u = q_mu_u
+        self.q_sqrt_u = q_sqrt_u
+        self.q_mu_v = q_mu_v
+        self.q_sqrt_v = q_sqrt_v        
         #self._set_qdist(q_mu, q_sqrt)
 
     """
@@ -104,7 +129,7 @@ class BasePosterior(AbstractPosterior):
             self._q_dist = _MvNormal(q_mu, q_sqrt)
     """
 
-class IndependentPosterior(BasePosterior):
+class IndependentOrthogonalPosterior(BaseOrthogonalPosterior):
     
     def _post_process_mean_and_cov(
         self, mean: TensorType, cov: TensorType, full_cov: bool, full_output_cov: bool
@@ -115,13 +140,13 @@ class IndependentPosterior(BasePosterior):
 
         # TODO: this assumes that Xnew has shape [N, D] and no leading dims
 
-        if isinstance(self.kernel, SeparateIndependent):
+        if isinstance(self.kernel, kernels.SeparateIndependent):
             # NOTE calling kernel(Xnew, full_cov=full_cov, full_output_cov=False) directly would
             # return
             # if full_cov: [P, N, N] -- this is what we want
             # else: [N, P] instead of [P, N] as we get from the explicit stack below
             Kff = tf.stack([k(Xnew, full_cov=full_cov) for k in self.kernel.kernels], axis=0)
-        elif isinstance(self.kernel, MultioutputKernel):
+        elif isinstance(self.kernel, kernels.MultioutputKernel):
             # effectively, SharedIndependent path
             Kff = self.kernel.kernel(Xnew, full_cov=full_cov)
             # NOTE calling kernel(Xnew, full_cov=full_cov, full_output_cov=False) directly would
@@ -134,67 +159,75 @@ class IndependentPosterior(BasePosterior):
 
         return Kff
 
-class IndependentPosteriorSingleOutput(IndependentPosterior):
-    
-    # could almost be the same as IndependentPosteriorMultiOutput ...
-    def _conditional_fused(
-        self, Xnew: TensorType, full_cov: bool = False, full_output_cov: bool = False
-    ) -> MeanAndVariance:
-        # same as IndependentPosteriorMultiOutput, Shared~/Shared~ branch, except for following
-        # line:
-        Knn = self._get_Kff(Xnew)
-        Cnn = self._get_Cff(Xnew)
 
-        Kmm = Kuu(self.U_data, self.kernel, jitter=default_jitter())  # [M, M]
-        Kmn = Kuf(self.U_data, self.kernel, Xnew)  # [M, N]
+    def _get_Cff(self, Xnew: TensorType, full_cov: bool) -> tf.Tensor:
 
-        Cvv = Cvv
+        # TODO: this assumes that Xnew has shape [N, D] and no leading dims
 
-
-
-        fmean, fvar = base_conditional(
-            Kmn, Kmm, Knn, self.q_mu, full_cov=full_cov, q_sqrt=self.q_sqrt, white=self.whiten
-        )  # [N, P],  [P, N, N] or [N, P]
-        return self._post_process_mean_and_cov(fmean, fvar, full_cov, full_output_cov)
-
-class IndependentPosteriorMultiOutput(IndependentPosterior):
-    def _conditional_fused(
-        self, Xnew: Union[TensorType,tfp.distributions.MultivariateNormalDiag], full_cov: bool = False, full_output_cov: bool = False
-    ) -> MeanAndVariance:
-        
-        if isinstance(self.X_data, SharedIndependentInducingVariables) and isinstance(
-            self.kernel, SharedIndependent):
-            # same as IndependentPosteriorSingleOutput except for following line
-
-            Knn = self.kernel.kernel(Xnew, full_cov=full_cov)
-            # we don't call self.kernel() directly as that would do unnecessary tiling
-
-            Kmm = Kuus(self.X_data, self.kernel, jitter=default_jitter())  # [M, M]
-            Kmn = Kufs(self.X_data, self.kernel, Xnew)  # [M, N]
-
-            fmean, fvar = base_conditional(
-                Kmn, Kmm, Knn, self.q_mu, full_cov=full_cov, q_sqrt=self.q_sqrt, white=self.whiten
-            )  # [N, P],  [P, N, N] or [N, P]
-        elif isinstance(self.X_data, SharedIndependentDistributionalInducingVariables) and isinstance(
-            self.kernel, SharedIndependent):
-            # same as IndependentPosteriorSingleOutput except for following line
-            Knn = self.kernel.kernel(Xnew, full_cov=full_cov)
-            # we don't call self.kernel() directly as that would do unnecessary tiling
-
-            lcl_seed = np.random.randint(1e5)
-            tf.random.set_seed(lcl_seed)
-
-            Kmm = Kuus(self.X_data, self.kernel, jitter=default_jitter(), seed = lcl_seed)  # [M, M]
-            Kmn = Kufs(self.X_data, self.kernel, Xnew, seed  = lcl_seed)  # [M, N]
+        if isinstance(self.kernel, kernels.SeparateIndependent):
             
-            fmean, fvar = base_conditional(
-                Kmn, Kmm, Knn, self.q_mu, full_cov=full_cov, q_sqrt=self.q_sqrt, white=self.whiten
-            )  # [N, P],  [P, N, N] or [N, P]
-        
-        
-        else:
+            # TODO -- need to finish this at one point
+            # NOTE calling kernel(Xnew, full_cov=full_cov, full_output_cov=False) directly would
+            # return
+            # if full_cov: [P, N, N] -- this is what we want
+            # else: [N, P] instead of [P, N] as we get from the explicit stack below
+            #Kff = tf.stack([k(Xnew, full_cov=full_cov) for k in self.kernel.kernels], axis=0)
+
             raise NotImplementedError
 
-        return self._post_process_mean_and_cov(fmean, fvar, full_cov, full_output_cov)
+        elif isinstance(self.kernel, kernels.MultioutputKernel):
+            # effectively, SharedIndependent path
+            Kff = self.kernel.kernel(Xnew, full_cov=full_cov)
+            # NOTE calling kernel(Xnew, full_cov=full_cov, full_output_cov=False) directly would
+            # return
+            # if full_cov: [P, N, N] instead of [N, N]
+            # else: [N, P] instead of [N]
+
+            Kuu = self.kernel.kernel(self.inducing_variable_u.inducing_variable.Z, full_cov=True)
+            jittermat = tf.eye(self.inducing_variable_u.inducing_variable.num_inducing, dtype=Kuu.dtype) * default_jitter()
+            Kuu+= jittermat
+            L_Kuu = tf.linalg.cholesky(Kuu) #NOTE -- I think this is the first time we compute the Choleksy decomposition
+
+
+            #Kvv = self.kernel.kernel(self.inducing_variable_v.Z, full_cov=full_cov)
+            Kuf = self.kernel.kernel(self.inducing_variable_u.inducing_variable.Z, Xnew)
+
+            L_Kuu_inv_Kuf = tf.linalg.triangular_solve(L_Kuu, Kuf)
+
+            # compute the covariance due to the conditioning
+            if full_cov:
+                Cff = Kff - tf.linalg.matmul(L_Kuu_inv_Kuf, L_Kuu_inv_Kuf, transpose_a=True)  # [..., N, N]
+                #num_func = tf.shape(self.q_mu_u)[-1]
+                #N = tf.shape(Kuf)[-1]
+                #cov_shape = [num_func, N, N]
+                #Cff = tf.broadcast_to(tf.expand_dims(Cff, -3), cov_shape)  # [..., R, N, N]
+            else:
+                Cff = Kff - tf.reduce_sum(tf.square(L_Kuu_inv_Kuf), -2)  # [..., N]
+                #num_func = tf.shape(self.q_mu_u)[-1]
+                #N = tf.shape(Kuf)[-1]
+                #cov_shape = [num_func, N]  # [..., R, N]
+                #Cff = tf.broadcast_to(tf.expand_dims(Cff, -2), cov_shape)  # [..., R, N]
+
+        else:
+            # standard ("single-output") kernels
+            Kuu = self.kernel(self.inducing_variable_u.Z, full_cov=True)
+            L_Kuu = tf.linalg.cholesky(Kuu) #NOTE -- I think this is the first time we compute the Choleksy decomposition
+
+            #Kvv = self.kernel.kernel(self.inducing_variable_v.Z, full_cov=full_cov)
+            Kuf = self.kernel(self.inducing_variable_u.Z, Xnew)
+
+            L_Kuu_inv_Kuf = tf.linalg.triangular_solve(L_Kuu, Kuf)
+            
+            if full_cov:
+                Cff = Kff - tf.linalg.matmul(
+                    L_Kuu_inv_Kuf, L_Kuu_inv_Kuf, transpose_a=True)
+            else:
+                Cff = Kff - tf.reduce_sum(tf.square(L_Kuu_inv_Kuf), -2)  # [..., N]
+                #NOTE -- I don't think this is necessary
+                #Cff = Cff[:,tf.newaxis] # [..., N, 1]
+
+        return Cff, L_Kuu
+
+
 
 
