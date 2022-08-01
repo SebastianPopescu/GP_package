@@ -20,12 +20,17 @@ from typing import Any, Union, Optional
 from gpflow.config import default_float
 from gpflow.inducing_variables import InducingPoints
 
-from gp_package.base import TensorLike
-from ..inducing_variables import DistributionalInducingPoints
+from gpflow.base import TensorLike
+from gpflow.utilities import to_default_float
 from gpflow.kernels import Kernel
-from ..kernels import DistributionalKernel
 from .dispatch import Kuu
+import gpflow
+from ..inducing_variables import FourierFeatures1D
+import numpy as np
 
+BlockDiag = tf.linalg.LinearOperatorBlockDiag
+Diag = tf.linalg.LinearOperatorDiag
+LowRank = tf.linalg.LinearOperatorLowRankUpdate
 
 @Kuu.register(InducingPoints, Kernel)
 def Kuu_kernel_inducingpoints(
@@ -35,15 +40,28 @@ def Kuu_kernel_inducingpoints(
     Kzz += jitter * tf.eye(inducing_variable.num_inducing, dtype=Kzz.dtype)
     return Kzz
 
-@Kuu.register(object, DistributionalInducingPoints, DistributionalKernel)
-def Kuu_kernel_distributionalinducingpoints(sampled_inducing_points: TensorLike,
-    inducing_variable: DistributionalInducingPoints,  kernel: Kernel, *, jitter: float = 0.0
-) -> tf.Tensor:
-
-    distributional_inducing_points = inducing_variable.distribution
+@Kuu.register(FourierFeatures1D, gpflow.kernels.Matern12)
+def Kuu_matern12_fourierfeatures1d(inducing_variable, kernel, jitter=None):
     
-    Kzz = kernel(sampled_inducing_points, distributional_inducing_points)
-    Kzz += jitter * tf.eye(inducing_variable.num_inducing, dtype=Kzz.dtype)
-    return Kzz
+    #NOTE - nice python-esque iterator
+    a, b, ms = (lambda u: (u.a, u.b, u.ms))(inducing_variable)
+    omegas = 2.0 * np.pi * ms / (b - a)
 
+    # Cosine block:
+    lamb = 1.0 / kernel.lengthscales
+    two_or_four = to_default_float(tf.where(omegas == 0, 2.0, 4.0))
+    d_cos = (
+        (b - a) * (tf.square(lamb) + tf.square(omegas)) / lamb / kernel.variance / two_or_four
+    )  # eq. (111)
+    v_cos = tf.ones_like(d_cos) / tf.sqrt(kernel.variance)  # eq. (110)
+    cosine_block = LowRank(Diag(d_cos, is_positive_definite=True), v_cos[:, None])
+
+    # Sine block:
+    omegas = omegas[tf.not_equal(omegas, 0)]  # the sine block does not include omega=0
+    d_sin = (
+        (b - a) * (tf.square(lamb) + tf.square(omegas)) / lamb / kernel.variance / 4.0
+    )  # eq. (113)
+    sine_block = Diag(d_sin, is_positive_definite=True)
+
+    return BlockDiag([cosine_block, sine_block])
 

@@ -17,13 +17,13 @@ import numpy as np
 import tensorflow as tf
 
 from .. import kullback_leiblers, posteriors
-from ..base import AnyNDArray, InputData, MeanAndVariance, Parameter, RegressionData
+from gpflow.base import AnyNDArray, InputData, MeanAndVariance, Parameter, RegressionData
 from ..conditionals import conditional
 from gpflow.config import default_float
 from gpflow.inducing_variables import InducingVariables, InducingPoints
 from gpflow.kernels import Kernel
 from gpflow.likelihoods import Likelihood
-from ..mean_functions import MeanFunction, Zero
+from gpflow.mean_functions import MeanFunction, Zero
 from gpflow.utilities import positive, triangular
 from gpflow.base import Module
 #from .util import InducingVariablesLike, inducingpoint_wrapper

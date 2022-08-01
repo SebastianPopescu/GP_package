@@ -20,16 +20,15 @@ from packaging.version import Version
 from gpflow.base import TensorType
 from gpflow.config import default_float, default_jitter
 
-from gp_package.base import Parameter, TensorLike
+from gpflow.base import Parameter, TensorLike
 from .covariances import Kuu
 
 from gpflow.inducing_variables import InducingVariables
-from .inducing_variables import DistributionalInducingVariables, SharedIndependentDistributionalInducingVariables
 from gpflow.kernels import Kernel
-from .kernels import DistributionalKernel
 from gpflow.utilities import Dispatcher, to_default_float
-
 prior_kl = Dispatcher("prior_kl")
+
+from .inducing_variables import FourierFeatures1D
 
 
 @prior_kl.register(InducingVariables, Kernel, object, object)
@@ -46,20 +45,24 @@ def _kl_standard(
         K = Kuu(inducing_variable, kernel, jitter=default_jitter())  # [P, M, M] or [M, M]
         return gauss_kl(q_mu, q_sqrt, K)
 
-@prior_kl.register(DistributionalInducingVariables, Parameter, DistributionalKernel, object, object)
-def _kl_distributional(
-    inducing_variable: DistributionalInducingVariables,
-    sampled_inducing_points: Parameter,
-    kernel: DistributionalKernel,
+
+@prior_kl.register(FourierFeatures1D, Kernel, object, object)
+def _kl_standard(
+    inducing_variable: FourierFeatures1D,
+    kernel: Kernel,
     q_mu: TensorType,
     q_sqrt: TensorType,
     whiten: bool = False,
 ) -> tf.Tensor:
+
+    #TODO -- see if we need to modify something here
     if whiten:
         return gauss_kl(q_mu, q_sqrt, None)
     else:
-        K = Kuu(inducing_variable, sampled_inducing_points, kernel, jitter=default_jitter())  # [P, M, M] or [M, M]
+        K = Kuu(inducing_variable, kernel, jitter=default_jitter())  # [P, M, M] or [M, M]
         return gauss_kl(q_mu, q_sqrt, K)
+
+
 
 
 def gauss_kl(

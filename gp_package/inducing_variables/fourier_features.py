@@ -13,19 +13,22 @@
 # limitations under the License.
 
 import abc
+from ast import Param
 from typing import Optional
 
 import tensorflow as tf
 import tensorflow_probability as tfp
 from deprecated import deprecated
 
-from ..base import Module, Parameter, TensorData, TensorType
-from ..utils import positive
+from gpflow.base import Module, Parameter, TensorData, TensorType
+from gpflow.utilities import positive
 
+import numpy as np
 
-class DistributionalInducingVariables(Module):
+class FourierFeatures1D(Module):
     """
-    Abstract base class for distributional inducing variables.
+    Abstract base class for RKHS Fourier Features
+    'a' and 'b' will define the boundaries where the GP can operate on
     """
 
     @property
@@ -45,13 +48,21 @@ class DistributionalInducingVariables(Module):
         return self.num_inducing
 
 
-class DistributionalInducingPointsBase(DistributionalInducingVariables):
-    def __init__(self, Z_mean: TensorData, Z_var: TensorData, name: Optional[str] = None):
+class FourierPoints1DBase(FourierFeatures1D):
+    def __init__(self, a: TensorData, b: TensorData, M: int, name: Optional[str] = None):
         """
-        :param Z_mean: the initial mean positions of the inducing points, size [M, D]
-        :param Z_var: the initial var positions of the inducing points, size [M, D]
+        :param a: lower bound on the interval where the Fourier representation operates
+        :param b: upper bound on the interval where the Fourier representation operates
+        :param M: number of frequencies to use
+
         """
         super().__init__(name=name)
+
+        #TODO -- shouldn't these be set to trainable=False?
+        self.a = Parameter(a)
+        self.b = Parameter(b)
+        self.ms = np.arange(M)
+        """
         if not isinstance(Z_mean, (tf.Variable, tfp.util.TransformedVariable)):
             Z_mean = Parameter(Z_mean)
         self.Z_mean = Z_mean
@@ -59,24 +70,15 @@ class DistributionalInducingPointsBase(DistributionalInducingVariables):
         if not isinstance(Z_var, (tf.Variable, tfp.util.TransformedVariable)):
             Z_var = Parameter(value=Z_var, transform=positive())
         self.Z_var = Z_var
+        """
 
     @property
     def num_inducing(self) -> Optional[tf.Tensor]:
-        return tf.shape(self.Z_mean)[0]
+        return 2 * tf.shape(self.ms)[0] - 1
     
-    @property
-    def distribution(self) -> tfp.distributions.MultivariateNormalDiag:
-        return tfp.distributions.MultivariateNormalDiag(loc = self.Z_mean,
-            scale_diag = tf.sqrt(self.Z_var))
 
-    @property
-    def sampled_inducing_points(self) -> tf.Tensor:
-        return tfp.distributions.MultivariateNormalDiag(loc = self.Z_mean,
-            scale_diag = tf.sqrt(self.Z_var)).sample()
-
-
-class DistributionalInducingPoints(DistributionalInducingPointsBase):
+class FourierPoints1D(FourierPoints1DBase):
     """
-    Real-space inducing points
+    Fourier space frequencies
     """
 

@@ -12,14 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import enum
 from typing import Optional, Union, List
 
 import numpy as np
 import tensorflow as tf
-import tensorflow_probability as tfp
-
-from gp_package.base import TensorLike
 
 from .. import kullback_leiblers, posteriors
 from gpflow.base import AnyNDArray, InputData, MeanAndVariance, Module, Parameter, RegressionData
@@ -28,14 +24,14 @@ from gpflow.config import default_float
 from gpflow.inducing_variables import InducingVariables
 from gpflow.kernels import Kernel
 from gpflow.likelihoods import Likelihood
-from ..mean_functions import MeanFunction
+from gpflow.mean_functions import MeanFunction
 from gpflow.utilities import positive, triangular
 from gpflow.conditionals.util import sample_mvn
 from gpflow.models import BayesianModel, ExternalDataTrainingLossMixin
-from ..layers import SVGP, Distributional_SVGP
+from ..layers import VFF_SVGP
 
 
-class DistDeepGP(BayesianModel, ExternalDataTrainingLossMixin):
+class DeepVFFGP(BayesianModel, ExternalDataTrainingLossMixin):
 
     """
     #TODO -- update documentation
@@ -43,7 +39,7 @@ class DistDeepGP(BayesianModel, ExternalDataTrainingLossMixin):
 
     def __init__(
         self,
-        f_layers: List[SVGP],
+        f_layers: List[VFF_SVGP],
         likelihood: Likelihood,
         *,
         num_data: Optional[tf.Tensor] = None,
@@ -59,28 +55,18 @@ class DistDeepGP(BayesianModel, ExternalDataTrainingLossMixin):
         self.num_data = num_data
         self.f_layers = f_layers
 
-    def prior_kl_across_layers(self, list_sampled_inducing_points: Optional[List[TensorLike]] = None) -> tf.Tensor:
+    def prior_kl_across_layers(self) -> tf.Tensor:
         
         """
-        Get KL term for each hidden layer and sum them up
+        Get list of KL terms for each hidden layer
         """
 
         list_KL = []
 
-        for counter, layer in  enumerate(self.f_layers):
-            
-            if counter==0:
-                list_KL.append(kullback_leiblers.prior_kl(
-                    layer.inducing_variable, layer.kernel, layer.q_mu, layer.q_sqrt, whiten=layer.whiten)
-                )
-
-            else:
-
-                # NOTE -- currently we can only do whiten = True
-                # TODO -- try and implement un-whitened case as well
-                list_KL.append(kullback_leiblers.prior_kl(
-                    layer.inducing_variable, layer.inducing_variable.inducing_variable.Z_mean, layer.kernel, layer.q_mu, layer.q_sqrt, whiten=layer.whiten)
-                )
+        for layer in self.f_layers:
+            list_KL.append(kullback_leiblers.prior_kl(
+                layer.inducing_variable, layer.kernel, layer.q_mu, layer.q_sqrt, whiten=layer.whiten)
+            )
         return list_KL
 
     # type-ignore is because of changed method signature:
@@ -93,7 +79,7 @@ class DistDeepGP(BayesianModel, ExternalDataTrainingLossMixin):
         the log marginal likelihood of the model.
         """
         X, Y = data
-        kl = self.prior_kl_across_layers() # NOTE -- summed across all hidden layers
+        kl = self.prior_kl_across_layers() # NOTE -- this is a list 
         
         f_mean, f_var = self.predict_f(X, full_cov=False, full_output_cov=False)
         var_exp = self.likelihood.variational_expectations(f_mean, f_var, Y)
@@ -108,22 +94,15 @@ class DistDeepGP(BayesianModel, ExternalDataTrainingLossMixin):
         else:
             return tf.reduce_sum(var_exp) * scale - tf.reduce_sum(kl)
 
-
     def predict_f(
         self, Xnew: InputData, num_samples: int = 1, full_cov: bool = False, full_output_cov: bool = False
     ) -> MeanAndVariance:
 
         features = Xnew
-        for counter, layer in enumerate(self.f_layers):
-
-            if counter==0:
-                mean, cov = layer(features)
-
-            else:
-
-                moments = tfp.distributions.MultivariateNormalDiag(loc=mean, scale_diag=tf.sqrt(cov))
-                mean, cov = layer(features, moments)
-
+        for layer in self.f_layers:
+            mean, cov = layer(features)
+                
+            ### sampling part ###
             if full_cov:
                 # mean: [..., N, P]
                 # cov: [..., P, N, N]
@@ -139,30 +118,21 @@ class DistDeepGP(BayesianModel, ExternalDataTrainingLossMixin):
                     mean, cov, full_output_cov, num_samples=num_samples
                 )  # [..., (S), N, P]
             features = tf.squeeze(features, axis = 0) 
+        
         return mean, cov
 
         # tf.debugging.assert_positive(var)  # We really should make the tests pass with this here
         #return mu + self.mean_function(Xnew), var
 
-
     def _evaluate_layer_wise_deep_gp(
-        self, Xnew: InputData, num_samples: int = 1, full_cov: bool = False, full_output_cov: bool = False
+        self, Xnew: InputData, *, num_samples: int = 1, full_cov: bool = False, full_output_cov: bool = False
     ) -> MeanAndVariance:
 
         layer_moments = []
 
         features = Xnew
-
-        for counter, layer in enumerate(self.f_layers):
-
-            if counter==0:
-                mean, cov = layer(features)
-
-            else:
-
-                moments = tfp.distributions.MultivariateNormalDiag(loc=mean, scale_diag=tf.sqrt(cov))
-                mean, cov = layer(features, moments)
-
+        for layer in self.f_layers:
+            mean, cov = layer(features)
             layer_moments.append([mean, cov])
 
             if full_cov:
@@ -179,7 +149,7 @@ class DistDeepGP(BayesianModel, ExternalDataTrainingLossMixin):
                 features = sample_mvn(
                     mean, cov, full_output_cov, num_samples=num_samples
                 )  # [..., (S), N, P]
-            features = tf.squeeze(features, axis = 0)             
+            features = tf.squeeze(features, axis = 0)            
         return layer_moments
 
         # tf.debugging.assert_positive(var)  # We really should make the tests pass with this here

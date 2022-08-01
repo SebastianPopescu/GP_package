@@ -20,11 +20,11 @@ import tensorflow as tf
 from .. import kullback_leiblers, posteriors
 from gpflow.base import AnyNDArray, InputData, MeanAndVariance, Module, Parameter, RegressionData
 from ..conditionals import conditional
-from ..config import default_float
+from gpflow.config import default_float
 from gpflow.inducing_variables import InducingVariables
 from gpflow.kernels import Kernel
 from gpflow.likelihoods import Likelihood
-from ..mean_functions import MeanFunction
+from gpflow.mean_functions import MeanFunction
 from gpflow.utilities import positive, triangular
 from gpflow.conditionals.util import sample_mvn
 from gpflow.models import BayesianModel, ExternalDataTrainingLossMixin

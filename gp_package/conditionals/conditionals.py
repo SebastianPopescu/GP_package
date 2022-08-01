@@ -20,12 +20,10 @@ import tensorflow_probability as tfp
 from gpflow.base import MeanAndVariance
 from gpflow.inducing_variables import InducingVariables
 from gpflow.kernels import Kernel
+
+from gp_package.inducing_variables.fourier_features import FourierFeatures1D
 from ..posteriors import BasePosterior, get_posterior_class
 from .dispatch import conditional
-
-from ..inducing_variables import DistributionalInducingVariables
-from ..kernels import DistributionalKernel
-
 
 @conditional._gpflow_internal_register(object, InducingVariables, Kernel, object)
 def _sparse_conditional(
@@ -86,12 +84,12 @@ def _sparse_conditional(
 
 
 
-@conditional._gpflow_internal_register(object, object, DistributionalInducingVariables, DistributionalKernel, object)
-def _sparse_distributional_conditional(
+#TODO -- see if there is any difference here to standard case
+@conditional._gpflow_internal_register(object, FourierFeatures1D, Kernel, object)
+def _sparse_conditional_VFF(
     Xnew: tf.Tensor,
-    Xnew_moments: tfp.distributions.MultivariateNormalDiag,
-    inducing_variable: DistributionalInducingVariables,
-    kernel: DistributionalKernel,
+    inducing_variable: FourierFeatures1D,
+    kernel: Kernel,
     f: tf.Tensor,
     *,
     full_cov: bool = False,
@@ -101,7 +99,7 @@ def _sparse_distributional_conditional(
     detailed_moments: bool = False
 ) -> MeanAndVariance:
     """
-    Single-output distributional GP conditional.
+    Single-output GP conditional.
 
     The covariance matrices used to calculate the conditional have the following shape:
     - Kuu: [M, M]
@@ -140,7 +138,6 @@ def _sparse_distributional_conditional(
         q_sqrt,
         whiten=white,
         mean_function=None,
-        precompute_cache=None,
     )
-    return posterior.fused_predict_f(Xnew, Xnew_moments, full_cov=full_cov, full_output_cov=full_output_cov, detailed_moments=detailed_moments)
+    return posterior.fused_predict_f(Xnew, full_cov=full_cov, full_output_cov=full_output_cov, detailed_moments=detailed_moments)
 

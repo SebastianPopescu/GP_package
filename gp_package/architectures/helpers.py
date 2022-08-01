@@ -36,15 +36,13 @@ from gpflow.inducing_variables import (
     MultioutputInducingVariables,
 )
 
+from gp_package.inducing_variables.fourier_features import FourierPoints1D
+
 from ..inducing_variables import (
-    DistributionalInducingPoints,
-    SeparateIndependentDistributionalInducingVariables,
-    SharedIndependentDistributionalInducingVariables,
-    MultioutputDistributionalInducingVariables
+    FourierFeatures1D,
 )
 
 from gpflow.kernels import SeparateIndependent, SharedIndependent, Kernel, MultioutputKernel, Stationary
-from ..kernels import DistributionalSharedIndependent, DistributionalKernel, DistributionalMultioutputKernel
 
 
 import copy
@@ -64,10 +62,8 @@ def deepcopy(input_module: M, memo: Optional[Dict[int, Any]] = None) -> M:
     """
     return copy.deepcopy(reset_cache_bijectors(input_module), memo)  # type: ignore
 
-
 from gpflow.mean_functions import MeanFunction, Identity, Linear, Zero
 from gpflow.utilities import set_trainable
-
 
 def construct_basic_kernel(
     kernels: Union[Kernel, List[Kernel]],
@@ -102,46 +98,6 @@ def construct_basic_kernel(
         mo_kern = SharedIndependent(kernels, output_dim)
     return mo_kern
 
-
-
-def construct_basic_hybrid_kernel(
-    kernels: Union[DistributionalKernel, List[DistributionalKernel]],
-    output_dim: Optional[int] = None,
-    share_hyperparams: bool = False,
-) -> DistributionalMultioutputKernel:
-    r"""
-    Construct a :class:`~gpflow.kernels.MultioutputKernel` to use
-    in :class:`GPLayer`\ s.
-
-    :param kernels: A single kernel or list of :class:`~gpflow.kernels.Kernel`\ s.
-        - When a single kernel is passed, the same kernel is used for all
-        outputs. Depending on ``share_hyperparams``, the hyperparameters will be
-        shared across outputs. You must also specify ``output_dim``.
-        - When a list of kernels is passed, each kernel in the list is used on a separate
-        output dimension and a :class:`gpflow.kernels.SeparateIndependent` is returned.
-    :param output_dim: The number of outputs. This is equal to the number of latent GPs
-        in the :class:`GPLayer`. When only a single kernel is specified for ``kernels``,
-        you must also specify ``output_dim``. When a list of kernels is specified for ``kernels``,
-        we assume that ``len(kernels) == output_dim``, and ``output_dim`` is not required.
-    :param share_hyperparams: If `True`, use the type of kernel and the same hyperparameters
-        (variance and lengthscales) for the different outputs. Otherwise, the
-        same type of kernel (Squared-Exponential, Matern12, and so on) is used for
-        the different outputs, but the kernel can have different hyperparameter values for each.
-    """
-
-    #TODO -- add these options eventaully
-
-    #if isinstance(kernels, list):
-    #    mo_kern = SeparateIndependent(kernels)
-    #elif not share_hyperparams:
-    #    copies = [deepcopy(kernels) for _ in range(output_dim)]
-    #    mo_kern = SeparateIndependent(copies)
-    #else:
-    
-    mo_kern = DistributionalSharedIndependent(kernels, output_dim)
-    
-    return mo_kern
-
 def construct_basic_inducing_variables(
     num_inducing: Union[int, List[int]],
     input_dim: int,
@@ -150,40 +106,7 @@ def construct_basic_inducing_variables(
     z_init: Optional[np.ndarray] = None,
 ) -> MultioutputInducingVariables:
     r"""
-    Construct a compatible :class:`~gpflow.inducing_variables.MultioutputInducingVariables`
-    to use in :class:`GPLayer`\ s.
-
-    :param num_inducing: The total number of inducing variables, ``M``.
-        This parameter can be freely chosen by the user. General advice
-        is to set it as high as possible, but smaller than the number of datapoints.
-        The computational complexity of the layer is cubic in ``M``.
-        If a list is passed, each element in the list specifies the number of inducing
-        variables to use for each ``output_dim``.
-    :param input_dim: The dimensionality of the input data (or features) ``X``.
-        Typically, this corresponds to ``X.shape[-1]``.
-        For :class:`~gpflow.inducing_variables.InducingPoints`, this specifies the dimensionality
-        of ``Z``.
-    :param output_dim: The dimensionality of the outputs (or targets) ``Y``.
-        Typically, this corresponds to ``Y.shape[-1]`` or the number of latent GPs.
-        The parameter is used to determine the number of inducing variable sets
-        to create when a different set is used for each output. The parameter
-        is redundant when ``num_inducing`` is a list, because the code assumes
-        that ``len(num_inducing) == output_dim``.
-    :param share_variables: If `True`, use the same inducing variables for different
-        outputs. Otherwise, create a different set for each output. Set this parameter to
-        `False` when ``num_inducing`` is a list, because otherwise the two arguments
-        contradict each other. If you set this parameter to `True`, you must also specify
-        ``output_dim``, because that is used to determine the number of inducing variable
-        sets to create.
-    :param z_init: Raw values to use to initialise
-        :class:`gpflow.inducing_variables.InducingPoints`. If `None` (the default), values
-        will be initialised from ``N(0, 1)``. The shape of ``z_init`` depends on the other
-        input arguments. If a single set of inducing points is used for all outputs (that
-        is, if ``share_variables`` is `True`), ``z_init`` should be rank two, with the
-        dimensions ``[M, input_dim]``. If a different set of inducing points is used for
-        the outputs (ithat is, if ``num_inducing`` is a list, or if ``share_variables`` is
-        `False`), ``z_init`` should be a rank three tensor with the dimensions
-        ``[output_dim, M, input_dim]``.
+    #TODO -- 
     """
 
     if z_init is None:
@@ -240,150 +163,20 @@ def construct_basic_inducing_variables(
         return SharedIndependentInducingVariables(shared_ip)
 
 
-
-
-
-
-
-def construct_basic_distributional_inducing_variables(
-    num_inducing: Union[int, List[int]],
+def construct_basic_fourier_features(
+    M: Union[int, List[int]],
     input_dim: int,
     output_dim: Optional[int] = None,
     share_variables: bool = False,
-    z_init_mean: Optional[np.ndarray] = None,
-    z_init_var: Optional[np.ndarray] = None,
-) -> MultioutputDistributionalInducingVariables:
+    a: Optional[float] = None,
+    b: Optional[float] = None
+) -> FourierFeatures1D:
+    
     r"""
-    Construct a compatible :class:`~gpflow.inducing_variables.MultioutputInducingVariables`
-    to use in :class:`GPLayer`\ s.
-
-    :param num_inducing: The total number of inducing variables, ``M``.
-        This parameter can be freely chosen by the user. General advice
-        is to set it as high as possible, but smaller than the number of datapoints.
-        The computational complexity of the layer is cubic in ``M``.
-        If a list is passed, each element in the list specifies the number of inducing
-        variables to use for each ``output_dim``.
-    :param input_dim: The dimensionality of the input data (or features) ``X``.
-        Typically, this corresponds to ``X.shape[-1]``.
-        For :class:`~gpflow.inducing_variables.InducingPoints`, this specifies the dimensionality
-        of ``Z``.
-    :param output_dim: The dimensionality of the outputs (or targets) ``Y``.
-        Typically, this corresponds to ``Y.shape[-1]`` or the number of latent GPs.
-        The parameter is used to determine the number of inducing variable sets
-        to create when a different set is used for each output. The parameter
-        is redundant when ``num_inducing`` is a list, because the code assumes
-        that ``len(num_inducing) == output_dim``.
-    :param share_variables: If `True`, use the same inducing variables for different
-        outputs. Otherwise, create a different set for each output. Set this parameter to
-        `False` when ``num_inducing`` is a list, because otherwise the two arguments
-        contradict each other. If you set this parameter to `True`, you must also specify
-        ``output_dim``, because that is used to determine the number of inducing variable
-        sets to create.
-    :param z_init: Raw values to use to initialise
-        :class:`gpflow.inducing_variables.InducingPoints`. If `None` (the default), values
-        will be initialised from ``N(0, 1)``. The shape of ``z_init`` depends on the other
-        input arguments. If a single set of inducing points is used for all outputs (that
-        is, if ``share_variables`` is `True`), ``z_init`` should be rank two, with the
-        dimensions ``[M, input_dim]``. If a different set of inducing points is used for
-        the outputs (ithat is, if ``num_inducing`` is a list, or if ``share_variables`` is
-        `False`), ``z_init`` should be a rank three tensor with the dimensions
-        ``[output_dim, M, input_dim]``.
+    #TODO -- 
     """
+    return FourierPoints1D(a=a, b=b, M=M)
 
-    if z_init_mean is None:
-        warnings.warn(
-            "No `z_init_mean` has been specified in `construct_basic_inducing_variables`. "
-            "Default initialization using random normal N(0, 1) will be used."
-        )
-
-    z_init_mean_is_given = z_init_mean is not None
-
-    if z_init_var is None:
-        warnings.warn(
-            "No `z_init_var` has been specified in `construct_basic_inducing_variables`. "
-            "Default initialization using random log-normal N(0, 1) will be used."
-        )
-
-    z_init_var_is_given = z_init_var is not None
-
-    if isinstance(num_inducing, list):
-        if output_dim is not None:
-            # TODO: the following assert may clash with MixedMultiOutputFeatures
-            # where the number of independent GPs can differ from the output
-            # dimension
-            assert output_dim == len(num_inducing)  # pragma: no cover
-        assert share_variables is False
-
-        inducing_variables = []
-        for i, num_ind_var in enumerate(num_inducing):
-            if z_init_mean_is_given:
-                assert len(z_init_mean[i]) == num_ind_var
-                z_init_mean_i = z_init_mean[i]
-            else:
-                #z_init_mean_i = np.random.randn(num_ind_var, input_dim).astype(dtype=default_float())
-                z_init_mean_i = np.random.uniform(low=-0.5, high=0.5, size=(num_ind_var, input_dim)).astype(dtype=default_float())
-            assert z_init_mean_i.shape == (num_ind_var, input_dim)
-            
-            if z_init_var_is_given:
-                assert len(z_init_var[i]) == num_ind_var
-                z_init_var_i = z_init_var[i]
-            else:
-                #z_init_var_i = np.random.lognormal(size=(num_ind_var, input_dim)).astype(dtype=default_float())
-                
-                z_init_var_i = np.ones((num_ind_var, input_dim)) * 0.0067153485
-                z_init_var_i = z_init_var_i.astype(dtype=default_float())
-            
-            assert z_init_var_i.shape == (num_ind_var, input_dim)
-            
-            
-            inducing_variables.append(DistributionalInducingPoints(z_init_mean_i, z_init_var_i))
-        return SeparateIndependentDistributionalInducingVariables(inducing_variables)
-
-    elif not share_variables:
-        inducing_variables = []
-        for o in range(output_dim):
-            
-            if z_init_mean_is_given:
-                if z_init_mean.shape != (output_dim, num_inducing, input_dim):
-                    raise ValueError(
-                        "When not sharing variables, z_init_mean must have shape"
-                        "[output_dim, num_inducing, input_dim]"
-                    )
-                z_init_mean_o = z_init_mean[o]
-            else:
-                #z_init_mean_o = np.random.randn(num_inducing, input_dim).astype(dtype=default_float())
-                z_init_mean_o = np.random.uniform(low=-0.5, high=0.5, size=(num_inducing, input_dim)).astype(dtype=default_float())
-
-            if z_init_var_is_given:
-                if z_init_var.shape != (output_dim, num_inducing, input_dim):
-                    raise ValueError(
-                        "When not sharing variables, z_init_mean must have shape"
-                        "[output_dim, num_inducing, input_dim]"
-                    )
-                z_init_var_o = z_init_var[o]
-            else:
-                #z_init_var_o = np.random.lognormal(num_inducing, input_dim).astype(dtype=default_float())
-                z_init_var_o = np.ones((num_inducing, input_dim)) * 0.0067153485
-                z_init_var_o = z_init_var_o.astype(dtype=default_float())
-
-            inducing_variables.append(DistributionalInducingPoints(z_init_mean_o, z_init_var_o))
-        return SeparateIndependentDistributionalInducingVariables(inducing_variables)
-
-    else:
-        # TODO: should we assert output_dim is None ?
-
-        z_init_mean = (
-            z_init_mean
-            if z_init_mean_is_given
-            else np.random.uniform(low=-0.5, high=0.5, size=(num_inducing, input_dim)).astype(dtype=default_float()) #np.random.randn(num_inducing, input_dim).astype(dtype=default_float())
-        )
-        z_init_var = (
-            z_init_var
-            if z_init_var_is_given
-            else 0.0067153485 * np.ones((num_inducing, input_dim)).astype(dtype=default_float())     #np.random.lognormal(size=(num_inducing, input_dim)).astype(dtype=default_float())
-        )
-        shared_ip = DistributionalInducingPoints(z_init_mean, z_init_var)
-        return SharedIndependentDistributionalInducingVariables(shared_ip)
 
 
 def construct_mean_function(

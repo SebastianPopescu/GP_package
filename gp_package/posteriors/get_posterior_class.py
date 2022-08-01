@@ -5,30 +5,23 @@ from typing import Optional, Tuple, Type, Union
 
 import tensorflow as tf
 
-from .. import covariances, kernels, mean_functions
-
 from gpflow.inducing_variables import (
     InducingVariables,
     SeparateIndependentInducingVariables,
     SharedIndependentInducingVariables,
 )
 
-from ..inducing_variables import (
-    DistributionalInducingVariables,
-    SeparateIndependentDistributionalInducingVariables,
-    SharedIndependentDistributionalInducingVariables
-)
-
-from ..kernels import DistributionalSharedIndependent
-
+from  ..inducing_variables import FourierFeatures1D
 
 from gpflow.kernels import Kernel
 from gpflow.mean_functions import MeanFunction
 from gpflow.utilities import Dispatcher, add_noise_cov
 from gpflow.utilities.ops import eye, leading_transpose
 
+from gp_package.inducing_variables.fourier_features import FourierFeatures1D
 
-from .gpflow_posterior import IndependentPosteriorMultiOutput
+
+from .gpflow_posterior import IndependentPosteriorMultiOutput, IndependentPosteriorSingleOutput
 from .base_posterior import BasePosterior
 
 get_posterior_class = Dispatcher("get_posterior_class")
@@ -56,42 +49,13 @@ def _get_posterior_independent_mo(
     return IndependentPosteriorMultiOutput
 
 
-
 @get_posterior_class.register(
-    DistributionalSharedIndependent,
-    (SeparateIndependentDistributionalInducingVariables, SharedIndependentDistributionalInducingVariables),
+    Kernel, FourierFeatures1D
 )
-def _get_posterior_independent_mo_distributional(
-    kernel: Kernel, inducing_variable: DistributionalInducingVariables
+def _get_posterior_independent_mo(
+    kernel: Kernel, inducing_variable: FourierFeatures1D
 ) -> Type[BasePosterior]:
     # independent multi-output
-    return IndependentPosteriorMultiOutput
-
-
-
-
-"""
-#NOTE -- I don't think we need this
-def create_posterior(
-    kernel: Kernel,
-    inducing_variable: InducingVariables,
-    q_mu: TensorType,
-    q_sqrt: TensorType,
-    whiten: bool,
-    mean_function: Optional[MeanFunction] = None,
-    precompute_cache: Union[PrecomputeCacheType, str, None] = PrecomputeCacheType.TENSOR,
-) -> BasePosterior:
-    posterior_class = get_posterior_class(kernel, inducing_variable)
-    precompute_cache = _validate_precompute_cache_type(precompute_cache)
-    return posterior_class(  # type: ignore
-        kernel,
-        inducing_variable,
-        q_mu,
-        q_sqrt,
-        whiten,
-        mean_function,
-        precompute_cache=precompute_cache,
-    )
-"""
+    return IndependentPosteriorSingleOutput
 
 

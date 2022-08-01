@@ -19,9 +19,6 @@ import tensorflow_probability as tfp
 
 from gpflow.base import MeanAndVariance
 
-from ...inducing_variables import SharedIndependentDistributionalInducingVariables
-
-
 from gpflow.inducing_variables import (
     FallbackSeparateIndependentInducingVariables,
     FallbackSharedIndependentInducingVariables,
@@ -35,8 +32,6 @@ from gpflow.kernels import (
     SeparateIndependent,
     SharedIndependent,
 )
-
-from ...kernels import DistributionalSharedIndependent
 
 from ...posteriors import (
     IndependentPosteriorMultiOutput,
@@ -96,61 +91,4 @@ def shared_independent_conditional(
         mean_function=None
     )
     return posterior.fused_predict_f(Xnew, full_cov=full_cov, full_output_cov=full_output_cov, detailed_moments = detailed_moments)
-
-
-
-@conditional._gpflow_internal_register(
-    object, object, SharedIndependentDistributionalInducingVariables, DistributionalSharedIndependent, object
-)
-def shared_independent_distributional_conditional(
-    Xnew: tf.Tensor,
-    Xnew_moments: tfp.distributions.MultivariateNormalDiag,
-    inducing_variable: SharedIndependentInducingVariables,
-    kernel: SharedIndependent,
-    f: tf.Tensor,
-    *,
-    full_cov: bool = False,
-    full_output_cov: bool = False,
-    q_sqrt: Optional[tf.Tensor] = None,
-    white: bool = False,
-    detailed_moments: bool = False
-) -> MeanAndVariance:
-    """Multioutput conditional for an independent kernel and shared inducing inducing.
-    Same behaviour as conditional with non-multioutput kernels.
-    The covariance matrices used to calculate the conditional have the following shape:
-    - Kuu: [M, M]
-    - Kuf: [M, N]
-    - Kff: N or [N, N]
-
-    Further reference
-    -----------------
-    - See `gpflow.conditionals._conditional` for a detailed explanation of
-      conditional in the single-output case.
-    - See the multioutput notebook for more information about the multioutput framework.
-    Parameters
-    ----------
-    :param Xnew: data matrix, size [N, D].
-    :param f: data matrix, [M, P]
-    :param full_cov: return the covariance between the datapoints
-    :param full_output_cov: return the covariance between the outputs.
-        Note: as we are using a independent kernel these covariances will be zero.
-    :param q_sqrt: matrix of standard-deviations or Cholesky matrices,
-        size [M, P] or [P, M, M].
-    :param white: boolean of whether to use the whitened representation
-    :return:
-        - mean:     [N, P]
-        - variance: [N, P], [P, N, N], [N, P, P] or [N, P, N, P]
-        Please see `gpflow.conditional._expand_independent_outputs` for more information
-        about the shape of the variance, depending on `full_cov` and `full_output_cov`.
-    """
-    posterior = IndependentPosteriorMultiOutput(
-        kernel,
-        inducing_variable,
-        f,
-        q_sqrt,
-        whiten=white,
-        mean_function=None,
-    )
-    return posterior.fused_predict_f_distributional(Xnew, Xnew_moments, full_cov=full_cov, full_output_cov=full_output_cov, detailed_moments = detailed_moments)
-
 

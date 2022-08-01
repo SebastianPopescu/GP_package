@@ -6,7 +6,8 @@ from typing import Optional, Tuple, Type, Union
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from .. import covariances, kernels, mean_functions
+from .. import covariances
+from gpflow import kernels
 from gpflow.base import MeanAndVariance, Module, Parameter, RegressionData, TensorType
 from gpflow.conditionals.util import (
     base_conditional,
@@ -28,9 +29,9 @@ from gpflow.inducing_variables import (
     SharedIndependentInducingVariables,
 )
 from ..inducing_variables import (
-    DistributionalInducingVariables
+    FourierFeatures1D
 )
-from ..kernels import DistributionalKernel
+
 
 from gpflow.kernels import Kernel
 from gpflow.mean_functions import MeanFunction
@@ -41,8 +42,8 @@ from gpflow.utilities.ops import eye, leading_transpose
 class AbstractPosterior(Module, ABC):
     def __init__(
         self,
-        kernel: Union[Kernel, DistributionalKernel],
-        X_data: Union[tf.Tensor, InducingVariables, DistributionalInducingVariables],
+        kernel: Kernel,
+        X_data: Union[tf.Tensor, InducingVariables, FourierFeatures1D],
         cache: Optional[Tuple[tf.Tensor, ...]] = None,
         mean_function: Optional[MeanFunction] = None,
     ) -> None:
@@ -74,26 +75,14 @@ class AbstractPosterior(Module, ABC):
         Computes predictive mean and (co)variance at Xnew, including mean_function
         Does not make use of caching
         """
-        mean, cov = self._conditional_fused_SVGP(
+        mean, cov = self._conditional_fused(
             Xnew, full_cov=full_cov, full_output_cov=full_output_cov, detailed_moments = detailed_moments
         )
         return self._add_mean_function(Xnew, mean), cov
 
-    def fused_predict_f_distributional(
-        self, Xnew: TensorType, Xnew_moments: tfp.distributions.MultivariateNormalDiag, *, full_cov: bool = False, full_output_cov: bool = False,
-        detailed_moments: bool = False
-    ) -> MeanAndVariance:
-        """
-        Computes predictive mean and (co)variance at Xnew, including mean_function
-        Does not make use of caching
-        """
-        mean, cov = self._conditional_fused_distributional_SVGP(
-            Xnew, Xnew_moments, full_cov=full_cov, full_output_cov=full_output_cov, detailed_moments = detailed_moments
-        )
-        return self._add_mean_function(Xnew, mean), cov
 
     @abstractmethod
-    def _conditional_fused_SVGP(
+    def _conditional_fused(
         self, Xnew: TensorType, *, full_cov: bool = False, full_output_cov: bool = False, detailed_moments: bool = False
     ) -> MeanAndVariance:
         """
@@ -101,22 +90,11 @@ class AbstractPosterior(Module, ABC):
         Does not make use of caching
         """
 
-    @abstractmethod
-    def _conditional_fused_distributional_SVGP(
-        self, Xnew: TensorType, Xnew_moments: tfp.distributions.MultivariateNormalDiag, full_cov: bool = False, full_output_cov: bool = False, 
-        detailed_moments: bool = False
-    ) -> MeanAndVariance:
-        """
-        Computes predictive mean and (co)variance at Xnew, *excluding* mean_function
-        Does not make use of caching
-        """
-
-
 class BasePosterior(AbstractPosterior):
     def __init__(
         self,
         kernel: Kernel,
-        inducing_variable: Union[InducingVariables,DistributionalInducingVariables],
+        inducing_variable: Union[InducingVariables, FourierFeatures1D],
         q_mu: tf.Tensor,
         q_sqrt: tf.Tensor,
         whiten: bool = True,
@@ -173,6 +151,7 @@ class IndependentPosterior(BasePosterior):
             # if full_cov: [P, N, N] instead of [N, N]
             # else: [N, P] instead of [N]
         else:
+            #NOTE -- this is what's gonna be called
             # standard ("single-output") kernels
             Kff = self.kernel(Xnew, full_cov=full_cov)  # [N, N] if full_cov else [N]
 

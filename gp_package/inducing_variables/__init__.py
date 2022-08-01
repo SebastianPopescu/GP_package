@@ -1,21 +1,7 @@
-from .distributional_inducing_variables import DistributionalInducingPoints, DistributionalInducingVariables
-from .multioutput import (
-    FallbackSeparateIndependentDistributionalInducingVariables,
-    FallbackSharedIndependentDistributionalInducingVariables,
-    MultioutputDistributionalInducingVariables,
-    SeparateIndependentDistributionalInducingVariables,
-    SharedIndependentDistributionalInducingVariables,
-)
-
-
+from .fourier_features import FourierFeatures1D, FourierPoints1D, FourierPoints1DBase
 
 __all__ = [
-    "DistributionalInducingPoints",
-    "DistributionalInducingVariables",
-    "distributional_inducing_variables",
-    "FallbackSeparateIndependentDistributionalInducingVariables",
-    "FallbackSharedIndependentDistributionalInducingVariables",
-    "MultioutputDistributionalInducingVariables",
-    "SeparateIndependentDistributionalInducingVariables",
-    "SharedIndependentDistributionalInducingVariables",
+    "FourierFeatures1D", 
+    "FourierPoints1D", 
+    "FourierPoints1DBase"
 ]

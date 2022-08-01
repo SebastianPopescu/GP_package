@@ -1,4 +1,4 @@
-from . import kufs, kuus, multioutput
+from . import kufs, kuus
 from .dispatch import Kuf, Kuu
 
 __all__ = [
@@ -7,5 +7,4 @@ __all__ = [
     "dispatch",
     "kufs",
     "kuus",
-    "multioutput",
 ]

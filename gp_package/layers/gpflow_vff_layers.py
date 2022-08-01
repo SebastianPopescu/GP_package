@@ -12,36 +12,47 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from typing import Optional, Union, Any
-
 import numpy as np
 import tensorflow as tf
-import tensorflow_probability as tfp
 
 from .. import kullback_leiblers, posteriors
-from ..base import AnyNDArray, InputData, MeanAndVariance, Parameter, RegressionData, TensorLike
+from gpflow.base import AnyNDArray, InputData, MeanAndVariance, Parameter, RegressionData
 from ..conditionals import conditional
 from gpflow.config import default_float
 from gpflow.inducing_variables import InducingVariables, InducingPoints
 from gpflow.kernels import Kernel
 from gpflow.likelihoods import Likelihood
-from ..mean_functions import MeanFunction, Zero
+from gpflow.mean_functions import MeanFunction, Zero
 from gpflow.utilities import positive, triangular
 from gpflow.base import Module
+#from .util import InducingVariablesLike, inducingpoint_wrapper
+from ..inducing_variables import FourierFeatures1D, FourierPoints1D
 
-from ..inducing_variables.distributional_inducing_variables import DistributionalInducingVariables
 
-class Distributional_SVGP(Module):
+InducingVariablesLike = Union[InducingVariables, tf.Tensor, AnyNDArray, FourierFeatures1D]
+InducingPointsLike = Union[InducingPoints, tf.Tensor, AnyNDArray, FourierPoints1D]
+
+class VFF_SVGP(Module):
     """
-    TODO -- update documentation here
+    #TODO -- update documentation
+    This is the Sparse Variational GP (SVGP). The key reference is
+
+    ::
+
+      @inproceedings{hensman2014scalable,
+        title={Scalable Variational Gaussian Process Classification},
+        author={Hensman, James and Matthews, Alexander G. de G. and Ghahramani, Zoubin},
+        booktitle={Proceedings of AISTATS},
+        year={2015}
+      }
 
     """
 
     def __init__(
         self,
         kernel: Kernel,
-        inducing_variable: DistributionalInducingVariables,
+        inducing_variable: InducingVariablesLike,
         *,
         mean_function: Optional[MeanFunction] = None,
         num_latent_gps: int = 1,
@@ -49,7 +60,6 @@ class Distributional_SVGP(Module):
         q_mu: Optional[tf.Tensor] = None,
         q_sqrt: Optional[tf.Tensor] = None,
         whiten: bool = True,
-        num_data: Optional[tf.Tensor] = None,
     ):
         """
         - kernel, likelihood, inducing_variables, mean_function are appropriate
@@ -62,31 +72,26 @@ class Distributional_SVGP(Module):
         - num_data is the total number of observations, defaults to X.shape[0]
           (relevant when feeding in external minibatches)
         """
-        # init the super class, accept args
         super().__init__()
-            
-        self.kernel = kernel 
+        self.kernel = kernel
         if mean_function is None:
-            mean_function = Zero()
+          mean_function = Zero()
         self.mean_function = mean_function
         self.num_latent_gps = num_latent_gps
-        self.num_data = num_data
         self.whiten = whiten
 
-
+        #TODO -- need to see how we can fix this 
         """
-        #NOTE -- this won;'t work in this case
         if not isinstance(inducing_variable, InducingVariables):
-            #NOTE -- this will nto work in this case as it needs both Z_mean and Z_var
             self.inducing_variable = InducingPoints(inducing_variable)
         else:
-            self.inducing_variable = inducing_variable
         """
-
         self.inducing_variable = inducing_variable
+
         # init variational parameters
         num_inducing = self.inducing_variable.num_inducing
-        #self._init_variational_parameters(num_inducing, q_mu, q_sqrt, q_diag) 
+    
+        #NOTE -- we don't actuallty make use of kwargs: q_mu and q_sqrt
 
         ###### Introduce variational parameters for q(U) #######
         self.q_mu = Parameter(
@@ -102,18 +107,17 @@ class Distributional_SVGP(Module):
             name=f"{self.name}_q_sqrt" if self.name else "q_sqrt",
         )  # [num_latent_gps, num_inducing, num_inducing]
 
-    def prior_kl(self, sampled_inducing_points: TensorLike = None) -> tf.Tensor:
+    def prior_kl(self) -> tf.Tensor:
         return kullback_leiblers.prior_kl(
-            self.inducing_variable, sampled_inducing_points, self.kernel, self.q_mu, self.q_sqrt, whiten=self.whiten
+            self.inducing_variable, self.kernel, self.q_mu, self.q_sqrt, whiten=self.whiten
         )
 
     def predict_f(
-        self, Xnew: InputData, Xnew_moments: tfp.distributions.MultivariateNormalDiag, full_cov: bool = False, full_output_cov: bool = False
+        self, Xnew: InputData, full_cov: bool = False, full_output_cov: bool = False
     ) -> MeanAndVariance:
         
         mu, var = conditional(
             Xnew,
-            Xnew_moments,
             self.inducing_variable,
             self.kernel,
             self.q_mu,
@@ -127,8 +131,9 @@ class Distributional_SVGP(Module):
         return mu + self.mean_function(Xnew), var
 
     def __call__(
-        self, Xnew: InputData, Xnew_moments: tfp.distributions.MultivariateNormalDiag, full_cov: bool = False, full_output_cov: bool = False
+        self, Xnew: InputData, full_cov: bool = False, full_output_cov: bool = False
     ) -> MeanAndVariance:
 
-        return self.predict_f(Xnew, Xnew_moments, full_cov, full_output_cov)
+        return self.predict_f(Xnew, full_cov, full_output_cov)
+        #return self.predict_f_samples(Xnew, num_samples, full_cov, full_output_cov)
 

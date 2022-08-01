@@ -21,7 +21,7 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 import numpy as np
 
-from .. import covariances, kernels, mean_functions
+from .. import covariances
 from gpflow.base import MeanAndVariance, Module, Parameter, RegressionData, TensorType
 from gpflow.conditionals.util import (
     base_conditional,
@@ -48,15 +48,11 @@ from gpflow.utilities import Dispatcher, add_noise_cov
 from gpflow.utilities.ops import eye, leading_transpose
 from .base_posterior import IndependentPosterior
 
-from ..inducing_variables import SharedIndependentDistributionalInducingVariables
-
-"""
-#TODO -- take care of this
 class IndependentPosteriorSingleOutput(IndependentPosterior):
     
     # could almost be the same as IndependentPosteriorMultiOutput ...
     def _conditional_fused(
-        self, Xnew: Union[TensorType,tfp.distributions.MultivariateNormalDiag], full_cov: bool = False, full_output_cov: bool = False
+        self, Xnew: TensorType, full_cov: bool = False, full_output_cov: bool = False, detailed_moments: bool = False
     ) -> MeanAndVariance:
         # same as IndependentPosteriorMultiOutput, Shared~/Shared~ branch, except for following
         # line:
@@ -70,28 +66,10 @@ class IndependentPosteriorSingleOutput(IndependentPosterior):
         )  # [N, P],  [P, N, N] or [N, P]
         return self._post_process_mean_and_cov(fmean, fvar, full_cov, full_output_cov)
 
-#TODO -- take care of this
-class IndependentPosteriorSingleOutput(IndependentPosterior):
-    # could almost be the same as IndependentPosteriorMultiOutput ...
-    def _conditional_fused(
-        self, Xnew: TensorType, full_cov: bool = False, full_output_cov: bool = False
-    ) -> MeanAndVariance:
-        # same as IndependentPosteriorMultiOutput, Shared~/Shared~ branch, except for following
-        # line:
-        Knn = self.kernel(Xnew, full_cov=full_cov)
-
-        Kmm = covariances.Kuu(self.X_data, self.kernel, jitter=default_jitter())  # [M, M]
-        Kmn = covariances.Kuf(self.X_data, self.kernel, Xnew)  # [M, N]
-
-        fmean, fvar = base_conditional(
-            Kmn, Kmm, Knn, self.q_mu, full_cov=full_cov, q_sqrt=self.q_sqrt, white=self.whiten
-        )  # [N, P],  [P, N, N] or [N, P]
-        return self._post_process_mean_and_cov(fmean, fvar, full_cov, full_output_cov)
-"""
-
+#NOTE -- we won't make use of this 
 class IndependentPosteriorMultiOutput(IndependentPosterior):
 
-    def _conditional_fused_SVGP(
+    def _conditional_fused(
         self, Xnew: TensorType, *, full_cov: bool = False, full_output_cov: bool = False, detailed_moments: bool = False
     ) -> MeanAndVariance:
 
@@ -108,24 +86,4 @@ class IndependentPosteriorMultiOutput(IndependentPosterior):
 
         return self._post_process_mean_and_cov(fmean, fvar, full_cov, full_output_cov)
 
-    def _conditional_fused_distributional_SVGP(
-        self, Xnew: TensorType, Xnew_moments: tfp.distributions.MultivariateNormalDiag, *, full_cov: bool = False, full_output_cov: bool = False,
-        detailed_moments: bool = False
-    ) -> MeanAndVariance:
-
-        # same as IndependentPosteriorSingleOutput except for following line
-        Knn = self.kernel.kernel(Xnew, Xnew_moments, full_cov=full_cov)
-        # we don't call self.kernel() directly as that would do unnecessary tiling
-
-        # sample from distributional inducing point here 
-        sampled_inducing_points = self.X_data.inducing_variable.sampled_inducing_points
-
-        Kmm = covariances.Kuu(sampled_inducing_points, self.X_data, self.kernel, jitter=default_jitter())  # [M, M]
-        Kmn = covariances.Kuf(sampled_inducing_points, self.X_data, self.kernel, Xnew, Xnew_moments)  # [M, N]
-        
-        fmean, fvar = base_conditional(
-            Kmn, Kmm, Knn, self.q_mu, full_cov=full_cov, q_sqrt=self.q_sqrt, white=self.whiten
-        )  # [N, P],  [P, N, N] or [N, P]    
-    
-        return self._post_process_mean_and_cov(fmean, fvar, full_cov, full_output_cov)
 
